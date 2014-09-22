@@ -141,7 +141,7 @@ class ProtocolGame : public Protocol
 		 *  \param client pointer to the caster's \ref ProtocolGame object
 		 */
 		static void registerLiveCast(Player* player, ProtocolGame* client){
-			m_liveCasts.emplace(player, client);
+			m_liveCasts.insert(std::make_pair(player, client));
 		}
 
 		/** \brief Removes a live cast from the list of available casts
