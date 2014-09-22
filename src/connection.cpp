@@ -23,6 +23,7 @@
 #include "connection.h"
 #include "outputmessage.h"
 #include "protocol.h"
+#include "protocolgame.h"
 #include "scheduler.h"
 #include "server.h"
 
@@ -332,6 +333,10 @@ bool Connection::send(OutputMessage_ptr msg)
 	}
 
 	if (m_pendingWrite == 0) {
+		auto unencryptedCopy = msg->getUnencryptedCopy();
+		if (msg->isBroadcastMsg() && unencryptedCopy) {
+			unencryptedCopy->append(msg);
+		}
 		msg->getProtocol()->onSendMessage(msg);
 		internalSend(msg);
 	} else {
@@ -377,6 +382,24 @@ void Connection::onWriteOperation(OutputMessage_ptr msg, const boost::system::er
 {
 	std::lock_guard<std::recursive_mutex> lockClass(m_connectionLock);;
 	m_writeTimer.cancel();
+
+	if (msg->isBroadcastMsg()) {
+		const auto client = dynamic_cast<ProtocolGame*>(m_protocol);
+		if (client) {
+			std::lock_guard<decltype(client->liveCastLock)> lockGuard(client->liveCastLock);
+
+			const auto& spectators = client->getLiveCastSpectators();
+			const auto unencryptedMsg = msg->getUnencryptedCopy();
+
+			if (unencryptedMsg) {
+				for (const auto spectator : spectators) {
+					auto newMsg = OutputMessagePool::getInstance()->getOutputMessage(spectator, false);
+					newMsg->append(unencryptedMsg);
+					spectator->getConnection()->send(newMsg);
+				}
+			}
+		}
+	}
 
 	msg.reset();
 
