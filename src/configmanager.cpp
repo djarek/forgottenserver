@@ -88,6 +88,7 @@ bool ConfigManager::load()
 	m_confBoolean[WARN_UNSAFE_SCRIPTS] = booleanString(getGlobalString(L, "warnUnsafeScripts", "yes"));
 	m_confBoolean[CONVERT_UNSAFE_SCRIPTS] = booleanString(getGlobalString(L, "convertUnsafeScripts", "yes"));
 	m_confBoolean[CLASSIC_EQUIPMENT_SLOTS] = booleanString(getGlobalString(L, "classicEquipmentSlots", "no"));
+	m_confBoolean[ENABLE_LIVE_CASTING] = booleanString(getGlobalString(L, "enableLiveCasting", "yes"));
 
 	m_confString[DEFAULT_PRIORITY] = getGlobalString(L, "defaultPriority", "high");
 	m_confString[SERVER_NAME] = getGlobalString(L, "serverName", "");
@@ -124,6 +125,7 @@ bool ConfigManager::load()
 	m_confInteger[CHECK_EXPIRED_MARKET_OFFERS_EACH_MINUTES] = getGlobalNumber(L, "checkExpiredMarketOffersEachMinutes", 60);
 	m_confInteger[MAX_MARKET_OFFERS_AT_A_TIME_PER_PLAYER] = getGlobalNumber(L, "maxMarketOffersAtATimePerPlayer", 100);
 	m_confInteger[MAX_PACKETS_PER_SECOND] = getGlobalNumber(L, "maxPacketsPerSecond", 25);
+	m_confInteger[LIVE_CAST_PORT] = getGlobalNumber(L, "liveCastPort", 7173);
 
 	m_isLoaded = true;
 	lua_close(L);

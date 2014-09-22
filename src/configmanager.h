@@ -44,6 +44,7 @@ class ConfigManager
 			WARN_UNSAFE_SCRIPTS = 13,
 			CONVERT_UNSAFE_SCRIPTS = 14,
 			CLASSIC_EQUIPMENT_SLOTS = 15,
+			ENABLE_LIVE_CASTING = 16,
 			LAST_BOOLEAN_CONFIG /* this must be the last one */
 		};
 
@@ -101,6 +102,7 @@ class ConfigManager
 			MAX_MARKET_OFFERS_AT_A_TIME_PER_PLAYER = 28,
 			EXP_FROM_PLAYERS_LEVEL_RANGE = 29,
 			MAX_PACKETS_PER_SECOND = 30,
+			LIVE_CAST_PORT = 31,
 			LAST_INTEGER_CONFIG /* this must be the last one */
 		};
 

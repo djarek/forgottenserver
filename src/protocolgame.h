@@ -60,7 +60,7 @@ struct TextMessage
 	}
 };
 
-class ProtocolGame final : public Protocol
+class ProtocolGame : public Protocol
 {
 	public:
 		// static protocol information
@@ -82,16 +82,127 @@ class ProtocolGame final : public Protocol
 			return version;
 		}
 
-	private:
+		const std::unordered_set<uint32_t>& getKnownCreatures() const {
+			return knownCreatureSet;
+		}
+
+		typedef std::unordered_map<Player*, ProtocolGame*> LiveCastsMap;
+		typedef std::vector<ProtocolGame*> CastSpectatorVec;
+
+		/** \brief Adds a spectator from the spectators vector.
+		 *  \param spectatorClient pointer to the \ref ProtocolSpectator object representing the spectator
+		 */
+		void addSpectator(ProtocolGame* spectatorClient);
+
+		/** \brief Removes a spectator from the spectators vector.
+		 *  \param spectatorClient pointer to the \ref ProtocolSpectator object representing the spectator
+		 */
+		void removeSpectator(ProtocolGame* spectatorClient);
+
+		/** \brief Starts the live cast.
+		 *  \param password live cast password(optional)
+		 *  \returns bool type indicating whether starting the cast was successful
+		*/
+		bool startLiveCast(const std::string& password = "");
+
+		/** \brief Stops the live cast and disconnects all spectators.
+		 *  \returns bool type indicating whether stopping the cast was successful
+		*/
+		bool stopLiveCast();
+
+		/** \brief Provides access to the spectator vector.
+		 *  \returns const reference to the spectator vector
+		 */
+		const CastSpectatorVec& getLiveCastSpectators() const {
+			return m_spectators;
+		}
+
+		/** \brief Provides information about spectator count.
+		 */
+		size_t getSpectatorCount() const {
+			return m_spectators.size();
+		}
+
+		bool isLiveCaster() const {
+			return m_isLiveCaster;
+		}
+
+		std::mutex liveCastLock;
+
+		/** \brief Adds a new live cast to the list of available casts
+		 *  \param player pointer to the casting \ref Player object
+		 *  \param client pointer to the caster's \ref ProtocolGame object
+		 */
+		void registerLiveCast();
+
+		/** \brief Removes a live cast from the list of available casts
+		 *  \param player pointer to the casting \ref Player object
+		 */
+		void unregisterLiveCast();
+
+		/** \brief Update live cast info in the database.
+		 *  \param player pointer to the casting \ref Player object
+		 *  \param client pointer to the caster's \ref ProtocolGame object
+		 */
+		void updateLiveCastInfo();
+
+		/** \brief Clears all live casts. Used to make sure there aro no live cast db rows left should a crash occur.
+		 *  \warning Only supposed to be called once.
+		 */
+		static void clearLiveCastInfo();
+
+		/** \brief Finds the caster's \ref ProtocolGame object
+		 *  \param player pointer to the casting \ref Player object
+		 *  \returns A pointer to the \ref ProtocolGame of the caster
+		 */
+		static ProtocolGame* getLiveCast(Player* player) {
+			const auto it = m_liveCasts.find(player);
+			return it != m_liveCasts.end() ? it->second : nullptr;
+		}
+
+		/** \brief Gets the live cast name/login
+		 *  \returns A const reference to a string containing the live cast name/login
+		 */
+		const std::string& getLiveCastName() const {
+			return m_liveCastName;
+		}
+		/** \brief Gets the live cast password
+		 *  \returns A const reference to a string containing the live cast password
+		 */
+		const std::string& getLiveCastPassword() const {
+			return m_liveCastPassword;
+		}
+		/** \brief Check if the live cast is password protected
+		 */
+		bool isPasswordProtected() const {
+			return !m_liveCastPassword.empty();
+		}
+		/** \brief Allows access to the live cast map.
+		 *  \returns A const reference to the live cast map.
+		 */
+		static const LiveCastsMap& getLiveCasts() {
+			return m_liveCasts;
+		}
+
+		/** \brief Allows spectators to send text messages to the caster
+		 *   and then get broadcast to the rest of the spectators
+		 *  \param text string containing the text message
+		 */
+		void broadcastSpectatorMessage(const std::string& text) {
+			sendChannelMessage("Spectator", text, TALKTYPE_CHANNEL_Y, CHANNEL_CAST);
+		}
+
+	protected:
 		std::unordered_set<uint32_t> knownCreatureSet;
 
 		void connect(uint32_t playerId, OperatingSystem_t operatingSystem);
 		void disconnect();
 		void disconnectClient(const std::string& message);
-		void writeToOutputBuffer(const NetworkMessage& msg);
 
-		void releaseProtocol() final;
-		void deleteProtocolTask() final;
+		void writeToOutputBuffer(const NetworkMessage& msg, bool broadcast = true);
+
+		void releaseProtocol();
+		void deleteProtocolTask();
 
 		void checkCreatureAsKnown(uint32_t id, bool& known, uint32_t& removedKnown);
 
@@ -100,9 +211,9 @@ class ProtocolGame final : public Protocol
 		bool canSee(const Position& pos) const;
 
 		// we have all the parse methods
-		void parsePacket(NetworkMessage& msg) final;
-		void onRecvFirstMessage(NetworkMessage& msg) final;
-		void onConnect() final;
+		void parsePacket(NetworkMessage& msg);
+		void onRecvFirstMessage(NetworkMessage& msg);
+		void onConnect();
 
 		//Parse methods
 		void parseAutoWalk(NetworkMessage& msg);
@@ -341,6 +452,18 @@ class ProtocolGame final : public Protocol
 
 		bool m_debugAssertSent;
 		bool m_acceptPackets;
+
+		static LiveCastsMap m_liveCasts; ///< Stores all available casts.
+
+		bool m_isLiveCaster; ///< Determines if this \ref ProtocolGame object is casting
+
+		///< list of spectators \warning This variable should only be accessed after locking \ref liveCastLock
+		CastSpectatorVec m_spectators;
+
+		///< Live cast name that is also used as login
+		std::string m_liveCastName;
+		///< Password used to access the live cast
+		std::string m_liveCastPassword;
 };
 
 #endif

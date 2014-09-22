@@ -42,8 +42,9 @@ class ProtocolLogin : public Protocol
 
 	protected:
 		void disconnectClient(const std::string& message);
-
+		void getCastingStreamsList();
 		void getCharacterList(const std::string& accountName, const std::string& password);
+		void addWorldInfo(OutputMessage_ptr& output, bool isLiveCastLogin = false);
 };
 
 #endif

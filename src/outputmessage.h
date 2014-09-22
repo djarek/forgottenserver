@@ -89,6 +89,22 @@ class OutputMessage : public NetworkMessage
 			frame = new_frame;
 		}
 
+		void setBroadcastMsg(bool isBroadcast) {
+			m_isBroadcastMsg = isBroadcast;
+		}
+
+		bool isBroadcastMsg() const {
+			return m_isBroadcastMsg;
+		}
+
+		OutputMessage_ptr getUnencryptedCopy() const {
+			return m_unencryptedCopy;
+		}
+
+		void setUnencryptedCopy(OutputMessage_ptr msg) {
+			m_unencryptedCopy = msg;
+		}
+
 	protected:
 		template <typename T>
 		inline void add_header(T add) {
@@ -142,6 +158,9 @@ class OutputMessage : public NetworkMessage
 		uint32_t outputBufferStart;
 
 		OutputMessageState state;
+
+		bool m_isBroadcastMsg;
+		OutputMessage_ptr m_unencryptedCopy;
 };
 
 typedef std::shared_ptr<OutputMessage> OutputMessage_ptr;
