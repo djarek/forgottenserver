@@ -53,6 +53,8 @@ extern Actions actions;
 extern CreatureEvents* g_creatureEvents;
 Chat g_chat;
 
+ProtocolGame::LiveCastsMap ProtocolGame::m_liveCasts;
+
 // Helping templates to add dispatcher tasks
 template<class FunctionType>
 void ProtocolGame::addGameTaskInternal(bool droppable, uint32_t delay, const FunctionType& func)
@@ -72,7 +74,9 @@ ProtocolGame::ProtocolGame(Connection_ptr connection) :
 	m_challengeTimestamp(0),
 	m_challengeRandom(0),
 	m_debugAssertSent(false),
-	m_acceptPackets(false)
+	m_acceptPackets(false),
+	m_isLiveCaster(false),
+	m_isSpectator(false)
 {
 	//
 }
@@ -90,6 +94,11 @@ void ProtocolGame::setPlayer(Player* p)
 void ProtocolGame::releaseProtocol()
 {
 	//dispatcher thread
+	if(m_isSpectator)
+		player->client->removeSpectator(this);
+	else if(m_isLiveCaster)
+		stopLiveCast();
+
 	if (player && player->client == this) {
 		player->client = nullptr;
 	}
@@ -99,7 +108,7 @@ void ProtocolGame::releaseProtocol()
 void ProtocolGame::deleteProtocolTask()
 {
 	//dispatcher thread
-	if (player) {
+	if (player && !m_isSpectator) {
 		g_game.ReleaseCreature(player);
 		player = nullptr;
 	}
@@ -256,6 +265,13 @@ void ProtocolGame::logout(bool displayEffect, bool forced)
 		return;
 	}
 
+	if(isSpectator()){
+		player->client->removeSpectator(this);
+		if(Connection_ptr connection = getConnection())
+			connection->closeConnection();
+		return;
+	}
+
 	if (!player->isRemoved()) {
 		if (!forced) {
 			if (!player->isAccessPlayer()) {
@@ -282,11 +298,102 @@ void ProtocolGame::logout(bool displayEffect, bool forced)
 		}
 	}
 
+	stopLiveCast();
+
 	if (Connection_ptr connection = getConnection()) {
 		connection->closeConnection();
 	}
 
 	g_game.removeCreature(player);
+}
+
+bool ProtocolGame::startLiveCast(const std::string& password /*= ""*/)
+{
+	if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !getConnection())
+		return false;
+
+	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
+
+	m_liveCastPassword = password;
+	m_spectators.clear();
+	m_isLiveCaster = true;
+	registerLiveCast(player, this);
+
+	return true;
+}
+
+bool ProtocolGame::stopLiveCast()
+{
+	if(!m_isLiveCaster || m_isSpectator || !player)
+		return false;
+
+	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
+
+	for(auto& spectator : m_spectators){
+		spectator->m_isSpectator = false;
+		spectator->disconnectClient("Live cast has been stopped. Relogin to refresh the cast list.");
+		spectator->unRef();
+	}
+
+	m_spectators.clear();
+	m_isLiveCaster = false;
+	unregisterLiveCast(player);
+
+	return true;
+}
+
+void ProtocolGame::addSpectator(ProtocolGame* client)
+{
+	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
+
+	m_spectators.push_back(client);
+	client->addRef();
+}
+
+void ProtocolGame::removeSpectator(ProtocolGame* client)
+{
+	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
+
+	auto it = std::find(m_spectators.begin(), m_spectators.end(), client);
+	if(it != m_spectators.end()){
+		m_spectators.erase(it);
+		client->m_isSpectator = false;
+		client->unRef();
+	}
+}
+
+void ProtocolGame::liveCastLogin(const std::string& liveCastName, const std::string& liveCastPassword)
+{
+	//dispatcher thread
+	auto _player = g_game.getPlayerByName(liveCastName);
+	if(!_player){
+		disconnectClient("Live cast no longer exists. Please relogin to refresh the list.");
+		return;
+	}
+
+	auto it = getLiveCast(_player);
+	if (it == m_liveCasts.end()){
+		disconnectClient("Live cast no longer exists. Please relogin to refresh the list.");
+		return;
+	}
+
+	auto liveCasterProtocol = (*it).second;
+
+	if(_player && !_player->isRemoved() && liveCasterProtocol->isLiveCaster()){
+		if(liveCasterProtocol->m_liveCastPassword != liveCastPassword){
+			disconnectClient("Wrong live cast password.");
+			return;
+		}
+
+		m_isSpectator = true;
+		player = _player;
+		eventConnect = 0;
+		sendAddCreature(player, player->getPosition(), 0, false);
+		m_acceptPackets = true;
+		(*it).second->addSpectator(this);
+	}
+	else
+		disconnectClient("Live cast no longer exists. Please relogin to refresh the list.");
 }
 
 void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
@@ -342,7 +449,10 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	if (accountName.empty()) {
-		dispatchDisconnectClient("You must enter your account name.");
+		if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING))
+			dispatchDisconnectClient("You must enter your account name.");
+		else
+			g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::liveCastLogin, this, characterName, password)));
 		return;
 	}
 
@@ -417,6 +527,7 @@ void ProtocolGame::disconnectClient(const std::string& message)
 		output->AddString(message);
 		OutputMessagePool::getInstance()->send(output);
 	}
+	stopLiveCast();
 	disconnect();
 }
 
@@ -428,11 +539,27 @@ void ProtocolGame::disconnect()
 	}
 }
 
-void ProtocolGame::writeToOutputBuffer(const NetworkMessage& msg)
+void ProtocolGame::writeToOutputBuffer(const NetworkMessage& msg, bool broadcast /*= true*/)
 {
-	OutputMessage_ptr out = getOutputBuffer(msg.getMessageLength());
-	if (out) {
-		out->append(msg);
+	OutputMessage_ptr out;
+	if(!broadcast && isLiveCaster()){
+		out = OutputMessagePool::getInstance()->getOutputMessage(this, false);
+		out->setBroadcastMsg(false);
+
+		if (out){
+			out->append(msg);
+			if(auto connection = getConnection())
+				connection->send(out);
+		}
+	}
+	else{
+		out = getOutputBuffer(msg.getMessageLength());
+		out->setBroadcastMsg(true);
+
+		if (out)
+			out->append(msg);
+		if(isLiveCaster() && !out->getUnencryptedCopy())
+			out->setUnencryptedCopy(OutputMessagePool::getInstance()->getOutputMessage(this, false));
 	}
 }
 
@@ -452,7 +579,7 @@ void ProtocolGame::parsePacket(NetworkMessage& msg)
 		return;
 	}
 
-	//a dead player can not performs actions
+	//a dead player can not perform actions
 	if (player->isRemoved() || player->getHealth() <= 0) {
 		if (recvbyte == 0x0F) {
 			disconnect();
@@ -463,94 +590,103 @@ void ProtocolGame::parsePacket(NetworkMessage& msg)
 			return;
 		}
 	}
-
-	switch (recvbyte) {
-		case 0x14: g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::logout, this, true, false))); break;
-		case 0x1D: addGameTask(&Game::playerReceivePingBack, player->getID()); break;
-		case 0x1E: addGameTask(&Game::playerReceivePing, player->getID()); break;
-		case 0x32: parseExtendedOpcode(msg); break; //otclient extended opcode
-		case 0x64: parseAutoWalk(msg); break;
-		case 0x65: addGameTask(&Game::playerMove, player->getID(), NORTH); break;
-		case 0x66: addGameTask(&Game::playerMove, player->getID(), EAST); break;
-		case 0x67: addGameTask(&Game::playerMove, player->getID(), SOUTH); break;
-		case 0x68: addGameTask(&Game::playerMove, player->getID(), WEST); break;
-		case 0x69: addGameTask(&Game::playerStopAutoWalk, player->getID()); break;
-		case 0x6A: addGameTask(&Game::playerMove, player->getID(), NORTHEAST); break;
-		case 0x6B: addGameTask(&Game::playerMove, player->getID(), SOUTHEAST); break;
-		case 0x6C: addGameTask(&Game::playerMove, player->getID(), SOUTHWEST); break;
-		case 0x6D: addGameTask(&Game::playerMove, player->getID(), NORTHWEST); break;
-		case 0x6F: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), NORTH); break;
-		case 0x70: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), EAST); break;
-		case 0x71: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), SOUTH); break;
-		case 0x72: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), WEST); break;
-		case 0x78: parseThrow(msg); break;
-		case 0x79: parseLookInShop(msg); break;
-		case 0x7A: parsePlayerPurchase(msg); break;
-		case 0x7B: parsePlayerSale(msg); break;
-		case 0x7C: addGameTask(&Game::playerCloseShop, player->getID()); break;
-		case 0x7D: parseRequestTrade(msg); break;
-		case 0x7E: parseLookInTrade(msg); break;
-		case 0x7F: addGameTask(&Game::playerAcceptTrade, player->getID()); break;
-		case 0x80: addGameTask(&Game::playerCloseTrade, player->getID()); break;
-		case 0x82: parseUseItem(msg); break;
-		case 0x83: parseUseItemEx(msg); break;
-		case 0x84: parseUseWithCreature(msg); break;
-		case 0x85: parseRotateItem(msg); break;
-		case 0x87: parseCloseContainer(msg); break;
-		case 0x88: parseUpArrowContainer(msg); break;
-		case 0x89: parseTextWindow(msg); break;
-		case 0x8A: parseHouseWindow(msg); break;
-		case 0x8C: parseLookAt(msg); break;
-		case 0x8D: parseLookInBattleList(msg); break;
-		case 0x8E: /* join aggression */ break;
-		case 0x96: parseSay(msg); break;
-		case 0x97: addGameTask(&Game::playerRequestChannels, player->getID()); break;
-		case 0x98: parseOpenChannel(msg); break;
-		case 0x99: parseCloseChannel(msg); break;
-		case 0x9A: parseOpenPrivateChannel(msg); break;
-		case 0x9E: addGameTask(&Game::playerCloseNpcChannel, player->getID()); break;
-		case 0xA0: parseFightModes(msg); break;
-		case 0xA1: parseAttack(msg); break;
-		case 0xA2: parseFollow(msg); break;
-		case 0xA3: parseInviteToParty(msg); break;
-		case 0xA4: parseJoinParty(msg); break;
-		case 0xA5: parseRevokePartyInvite(msg); break;
-		case 0xA6: parsePassPartyLeadership(msg); break;
-		case 0xA7: addGameTask(&Game::playerLeaveParty, player->getID()); break;
-		case 0xA8: parseEnableSharedPartyExperience(msg); break;
-		case 0xAA: addGameTask(&Game::playerCreatePrivateChannel, player->getID()); break;
-		case 0xAB: parseChannelInvite(msg); break;
-		case 0xAC: parseChannelExclude(msg); break;
-		case 0xBE: addGameTask(&Game::playerCancelAttackAndFollow, player->getID()); break;
-		case 0xC9: /* update tile */ break;
-		case 0xCA: parseUpdateContainer(msg); break;
-		case 0xCB: parseBrowseField(msg); break;
-		case 0xCC: parseSeekInContainer(msg); break;
-		case 0xD2: addGameTask(&Game::playerRequestOutfit, player->getID()); break;
-		case 0xD3: parseSetOutfit(msg); break;
-		case 0xD4: parseToggleMount(msg); break;
-		case 0xDC: parseAddVip(msg); break;
-		case 0xDD: parseRemoveVip(msg); break;
-		case 0xDE: parseEditVip(msg); break;
-		case 0xE6: parseBugReport(msg); break;
-		case 0xE7: /* thank you */ break;
-		case 0xE8: parseDebugAssert(msg); break;
-		case 0xF0: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerShowQuestLog, player->getID()); break;
-		case 0xF1: parseQuestLine(msg); break;
-		case 0xF2: /* rule violation report */ break;
-		case 0xF3: /* get object info */ break;
-		case 0xF4: parseMarketLeave(); break;
-		case 0xF5: parseMarketBrowse(msg); break;
-		case 0xF6: parseMarketCreateOffer(msg); break;
-		case 0xF7: parseMarketCancelOffer(msg); break;
-		case 0xF8: parseMarketAcceptOffer(msg); break;
-		case 0xF9: parseModalWindowAnswer(msg); break;
-
-		default:
-			// std::cout << "Player: " << player->getName() << " sent an unknown packet header: 0x" << std::hex << (int16_t)recvbyte << std::dec << "!" << std::endl;
-			break;
+	if(isSpectator()){
+		switch(recvbyte) {
+			case 0x14: g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::logout, this, true, false))); break;
+			case 0x1D: g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::sendPingBack, this))); break;
+			case 0x1E: g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::sendPing, this))); break;
+			default:
+				break;
+		}
 	}
+	else{
+		switch (recvbyte) {
+			case 0x14: g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::logout, this, true, false))); break;
+			case 0x1D: addGameTask(&Game::playerReceivePingBack, player->getID()); break;
+			case 0x1E: addGameTask(&Game::playerReceivePing, player->getID()); break;
+			case 0x32: parseExtendedOpcode(msg); break; //otclient extended opcode
+			case 0x64: parseAutoWalk(msg); break;
+			case 0x65: addGameTask(&Game::playerMove, player->getID(), NORTH); break;
+			case 0x66: addGameTask(&Game::playerMove, player->getID(), EAST); break;
+			case 0x67: addGameTask(&Game::playerMove, player->getID(), SOUTH); break;
+			case 0x68: addGameTask(&Game::playerMove, player->getID(), WEST); break;
+			case 0x69: addGameTask(&Game::playerStopAutoWalk, player->getID()); break;
+			case 0x6A: addGameTask(&Game::playerMove, player->getID(), NORTHEAST); break;
+			case 0x6B: addGameTask(&Game::playerMove, player->getID(), SOUTHEAST); break;
+			case 0x6C: addGameTask(&Game::playerMove, player->getID(), SOUTHWEST); break;
+			case 0x6D: addGameTask(&Game::playerMove, player->getID(), NORTHWEST); break;
+			case 0x6F: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), NORTH); break;
+			case 0x70: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), EAST); break;
+			case 0x71: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), SOUTH); break;
+			case 0x72: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), WEST); break;
+			case 0x78: parseThrow(msg); break;
+			case 0x79: parseLookInShop(msg); break;
+			case 0x7A: parsePlayerPurchase(msg); break;
+			case 0x7B: parsePlayerSale(msg); break;
+			case 0x7C: addGameTask(&Game::playerCloseShop, player->getID()); break;
+			case 0x7D: parseRequestTrade(msg); break;
+			case 0x7E: parseLookInTrade(msg); break;
+			case 0x7F: addGameTask(&Game::playerAcceptTrade, player->getID()); break;
+			case 0x80: addGameTask(&Game::playerCloseTrade, player->getID()); break;
+			case 0x82: parseUseItem(msg); break;
+			case 0x83: parseUseItemEx(msg); break;
+			case 0x84: parseUseWithCreature(msg); break;
+			case 0x85: parseRotateItem(msg); break;
+			case 0x87: parseCloseContainer(msg); break;
+			case 0x88: parseUpArrowContainer(msg); break;
+			case 0x89: parseTextWindow(msg); break;
+			case 0x8A: parseHouseWindow(msg); break;
+			case 0x8C: parseLookAt(msg); break;
+			case 0x8D: parseLookInBattleList(msg); break;
+			case 0x8E: /* join aggression */ break;
+			case 0x96: parseSay(msg); break;
+			case 0x97: addGameTask(&Game::playerRequestChannels, player->getID()); break;
+			case 0x98: parseOpenChannel(msg); break;
+			case 0x99: parseCloseChannel(msg); break;
+			case 0x9A: parseOpenPrivateChannel(msg); break;
+			case 0x9E: addGameTask(&Game::playerCloseNpcChannel, player->getID()); break;
+			case 0xA0: parseFightModes(msg); break;
+			case 0xA1: parseAttack(msg); break;
+			case 0xA2: parseFollow(msg); break;
+			case 0xA3: parseInviteToParty(msg); break;
+			case 0xA4: parseJoinParty(msg); break;
+			case 0xA5: parseRevokePartyInvite(msg); break;
+			case 0xA6: parsePassPartyLeadership(msg); break;
+			case 0xA7: addGameTask(&Game::playerLeaveParty, player->getID()); break;
+			case 0xA8: parseEnableSharedPartyExperience(msg); break;
+			case 0xAA: addGameTask(&Game::playerCreatePrivateChannel, player->getID()); break;
+			case 0xAB: parseChannelInvite(msg); break;
+			case 0xAC: parseChannelExclude(msg); break;
+			case 0xBE: addGameTask(&Game::playerCancelAttackAndFollow, player->getID()); break;
+			case 0xC9: /* update tile */ break;
+			case 0xCA: parseUpdateContainer(msg); break;
+			case 0xCB: parseBrowseField(msg); break;
+			case 0xCC: parseSeekInContainer(msg); break;
+			case 0xD2: addGameTask(&Game::playerRequestOutfit, player->getID()); break;
+			case 0xD3: parseSetOutfit(msg); break;
+			case 0xD4: parseToggleMount(msg); break;
+			case 0xDC: parseAddVip(msg); break;
+			case 0xDD: parseRemoveVip(msg); break;
+			case 0xDE: parseEditVip(msg); break;
+			case 0xE6: parseBugReport(msg); break;
+			case 0xE7: /* thank you */ break;
+			case 0xE8: parseDebugAssert(msg); break;
+			case 0xF0: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerShowQuestLog, player->getID()); break;
+			case 0xF1: parseQuestLine(msg); break;
+			case 0xF2: /* rule violation report */ break;
+			case 0xF3: /* get object info */ break;
+			case 0xF4: parseMarketLeave(); break;
+			case 0xF5: parseMarketBrowse(msg); break;
+			case 0xF6: parseMarketCreateOffer(msg); break;
+			case 0xF7: parseMarketCancelOffer(msg); break;
+			case 0xF8: parseMarketAcceptOffer(msg); break;
+			case 0xF9: parseModalWindowAnswer(msg); break;
 
+			default:
+				// std::cout << "Player: " << player->getName() << " sent an unknown packet header: 0x" << std::hex << (int16_t)recvbyte << std::dec << "!" << std::endl;
+				break;
+		}
+	}
 	if (msg.isOverrun()) {
 		disconnect();
 	}
@@ -2279,14 +2415,14 @@ void ProtocolGame::sendPing()
 {
 	NetworkMessage msg;
 	msg.AddByte(0x1D);
-	writeToOutputBuffer(msg);
+	writeToOutputBuffer(msg, false);
 }
 
 void ProtocolGame::sendPingBack()
 {
 	NetworkMessage msg;
 	msg.AddByte(0x1E);
-	writeToOutputBuffer(msg);
+	writeToOutputBuffer(msg, false);
 }
 
 void ProtocolGame::sendDistanceShoot(const Position& from, const Position& to, uint8_t type)

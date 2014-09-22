@@ -1160,6 +1160,14 @@ class Player : public Creature, public Cylinder
 		void forgetInstantSpell(const std::string& name);
 		bool hasLearnedInstantSpell(const std::string& name) const;
 
+		bool startLiveCast(const std::string& password){
+			return client->startLiveCast(password);
+		}
+
+		bool stopLiveCast(){
+			return client->stopLiveCast();
+		}
+
 	protected:
 		void checkTradeState(const Item* item);
 		bool hasCapacity(const Item* item, uint32_t count) const;

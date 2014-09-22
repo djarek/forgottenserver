@@ -46,6 +46,7 @@ class ConfigManager
 			STAMINA_SYSTEM = 14,
 			WARN_UNSAFE_SCRIPTS = 15,
 			CONVERT_UNSAFE_SCRIPTS = 16,
+			ENABLE_LIVE_CASTING = 17,
 			LAST_BOOLEAN_CONFIG /* this must be the last one */
 		};
 

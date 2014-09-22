@@ -71,7 +71,7 @@ freePremium = "no"
 kickIdlePlayerAfterMinutes = 15
 maxMessageBuffer = 4
 emoteSpells = "no"
-
+enableLiveCasting = "yes"
 -- Rates
 -- NOTE: rateExp is not used if you have enabled stages in data/XML/stages.xml
 rateExp = 5
