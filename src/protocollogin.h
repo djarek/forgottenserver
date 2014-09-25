@@ -49,6 +49,7 @@ class ProtocolLogin : public Protocol
 		void disconnectClient(const std::string& message);
 		void getCastingStreamsList(const std::string& password);
 		void getCharacterList(const std::string& accountName, const std::string& password);
+		void addWorldInfo(OutputMessage_ptr& output);
 };
 
 #endif
