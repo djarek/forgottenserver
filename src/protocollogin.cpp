@@ -72,8 +72,7 @@ void ProtocolLogin::getCastingStreamsList(const std::string& password)
 		auto casts = ProtocolGame::getLiveCasts();
 		output->AddByte((uint8_t)casts.size());
 
-		for(const auto& cast : casts)
-		{
+		for (const auto& cast : casts) {
 			output->AddByte(0);
 			output->AddString(cast.first->getName());
 		}
@@ -210,10 +209,11 @@ void ProtocolLogin::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	if (accountName.empty()) {
-		if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING))
+		if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING)) {
 			dispatchDisconnectClient("Invalid account name.");
-		else
+		} else {
 			g_dispatcher.addTask(createTask(std::bind(&ProtocolLogin::getCastingStreamsList, this, password)));
+		}
 		return;
 	}
 
