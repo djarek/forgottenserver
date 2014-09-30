@@ -94,11 +94,12 @@ void ProtocolGame::setPlayer(Player* p)
 void ProtocolGame::releaseProtocol()
 {
 	//dispatcher thread
-	if(m_isSpectator)
+	if (m_isSpectator) {
 		player->client->removeSpectator(this);
-	else if(m_isLiveCaster)
+	} else if(m_isLiveCaster) {
 		stopLiveCast();
-
+	}
+	
 	if (player && player->client == this) {
 		player->client = nullptr;
 	}
@@ -265,7 +266,7 @@ void ProtocolGame::logout(bool displayEffect, bool forced)
 		return;
 	}
 
-	if(isSpectator()){
+	if (isSpectator()) {
 		player->client->removeSpectator(this);
 		if(Connection_ptr connection = getConnection())
 			connection->closeConnection();
@@ -309,7 +310,7 @@ void ProtocolGame::logout(bool displayEffect, bool forced)
 
 bool ProtocolGame::startLiveCast(const std::string& password /*= ""*/)
 {
-	if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !getConnection())
+	if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !getConnection())
 		return false;
 
 	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
@@ -324,12 +325,12 @@ bool ProtocolGame::startLiveCast(const std::string& password /*= ""*/)
 
 bool ProtocolGame::stopLiveCast()
 {
-	if(!m_isLiveCaster || m_isSpectator || !player)
+	if (!m_isLiveCaster || m_isSpectator || !player)
 		return false;
 
 	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
 
-	for(auto& spectator : m_spectators){
+	for (auto& spectator : m_spectators) {
 		spectator->m_isSpectator = false;
 		spectator->disconnectClient("Live cast has been stopped. Relogin to refresh the cast list.");
 		spectator->unRef();
@@ -355,7 +356,7 @@ void ProtocolGame::removeSpectator(ProtocolGame* client)
 	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
 
 	auto it = std::find(m_spectators.begin(), m_spectators.end(), client);
-	if(it != m_spectators.end()){
+	if (it != m_spectators.end()) {
 		m_spectators.erase(it);
 		client->m_isSpectator = false;
 		client->unRef();
@@ -366,21 +367,21 @@ void ProtocolGame::liveCastLogin(const std::string& liveCastName, const std::str
 {
 	//dispatcher thread
 	auto _player = g_game.getPlayerByName(liveCastName);
-	if(!_player){
+	if (!_player) {
 		disconnectClient("Live cast no longer exists. Please relogin to refresh the list.");
 		return;
 	}
 
 	auto it = getLiveCast(_player);
-	if (it == m_liveCasts.end()){
+	if (it == m_liveCasts.end()) {
 		disconnectClient("Live cast no longer exists. Please relogin to refresh the list.");
 		return;
 	}
 
 	auto liveCasterProtocol = (*it).second;
 
-	if(_player && !_player->isRemoved() && liveCasterProtocol->isLiveCaster()){
-		if(liveCasterProtocol->m_liveCastPassword != liveCastPassword){
+	if (_player && !_player->isRemoved() && liveCasterProtocol->isLiveCaster()) {
+		if (liveCasterProtocol->m_liveCastPassword != liveCastPassword) {
 			disconnectClient("Wrong live cast password.");
 			return;
 		}
@@ -391,9 +392,9 @@ void ProtocolGame::liveCastLogin(const std::string& liveCastName, const std::str
 		sendAddCreature(player, player->getPosition(), 0, false);
 		m_acceptPackets = true;
 		(*it).second->addSpectator(this);
-	}
-	else
+	} else {
 		disconnectClient("Live cast no longer exists. Please relogin to refresh the list.");
+	}
 }
 
 void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
@@ -449,10 +450,11 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	if (accountName.empty()) {
-		if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING))
+		if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING)) {
 			dispatchDisconnectClient("You must enter your account name.");
-		else
+		} else {
 			g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::liveCastLogin, this, characterName, password)));
+		}
 		return;
 	}
 
@@ -542,24 +544,25 @@ void ProtocolGame::disconnect()
 void ProtocolGame::writeToOutputBuffer(const NetworkMessage& msg, bool broadcast /*= true*/)
 {
 	OutputMessage_ptr out;
-	if(!broadcast && isLiveCaster()){
+	if (!broadcast && isLiveCaster()) {
 		out = OutputMessagePool::getInstance()->getOutputMessage(this, false);
 		out->setBroadcastMsg(false);
 
-		if (out){
+		if (out) {
 			out->append(msg);
 			if(auto connection = getConnection())
 				connection->send(out);
 		}
-	}
-	else{
+	} else {
 		out = getOutputBuffer(msg.getMessageLength());
 		out->setBroadcastMsg(true);
 
-		if (out)
+		if (out) {
 			out->append(msg);
-		if(isLiveCaster() && !out->getUnencryptedCopy())
+		}
+		if (isLiveCaster() && !out->getUnencryptedCopy()) {
 			out->setUnencryptedCopy(OutputMessagePool::getInstance()->getOutputMessage(this, false));
+		}
 	}
 }
 
@@ -590,7 +593,7 @@ void ProtocolGame::parsePacket(NetworkMessage& msg)
 			return;
 		}
 	}
-	if(isSpectator()){
+	if (isSpectator()) {
 		switch(recvbyte) {
 			case 0x14: g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::logout, this, true, false))); break;
 			case 0x1D: g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::sendPingBack, this))); break;
@@ -598,8 +601,7 @@ void ProtocolGame::parsePacket(NetworkMessage& msg)
 			default:
 				break;
 		}
-	}
-	else{
+	} else {
 		switch (recvbyte) {
 			case 0x14: g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::logout, this, true, false))); break;
 			case 0x1D: addGameTask(&Game::playerReceivePingBack, player->getID()); break;
