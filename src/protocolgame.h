@@ -129,10 +129,6 @@ class ProtocolGame : public Protocol
 			return m_isLiveCaster;
 		}
 
-		bool isSpectator() const {
-			return m_isSpectator;
-		}
-
 		typedef std::unordered_map<Player*, ProtocolGame*> LiveCastsMap;
 		std::mutex liveCastLock;
 
@@ -140,37 +136,48 @@ class ProtocolGame : public Protocol
 		 *  \param player pointer to the casting \ref Player object
 		 *  \param client pointer to the caster's \ref ProtocolGame object
 		 */
-		static void registerLiveCast(Player* player, ProtocolGame* client){
+		static void registerLiveCast(Player* player, ProtocolGame* client) {
 			m_liveCasts.insert(std::make_pair(player, client));
 		}
 
 		/** \brief Removes a live cast from the list of available casts
 		 *  \param player pointer to the casting \ref Player object
 		 */
-		static void unregisterLiveCast(Player* player){
+		static void unregisterLiveCast(Player* player) {
 			m_liveCasts.erase(player);
 		}
 
 		/** \brief Finds the caster's \ref ProtocolGame object
 		 *  \param player pointer to the casting \ref Player object
-		 *  \returns An iterator pointing to the Player*, ProtocolGame* pair representing the live cast.
+		 *  \returns A pointer to the \ref ProtocolGame of the caster
 		 */
-		static LiveCastsMap::iterator getLiveCast(Player* player){
-			return m_liveCasts.find(player);
+		static ProtocolGame* getLiveCast(Player* player) {
+			const auto it = m_liveCasts.find(player);
+			if (it != m_liveCasts.end()) {
+				return it->second;
+			} else {
+				return nullptr;
+			}
+		}
+
+		const std::string& getLiveCastPassword() const {
+			return m_liveCastPassword;
 		}
 
 		/** \brief Allows access to the live cast map.
 		 *  \returns A const reference to the live cast map.
 		 */
-		static const LiveCastsMap& getLiveCasts(){
+		static const LiveCastsMap& getLiveCasts() {
 			return m_liveCasts;
 		}
-	private:
+
+	protected:
 		std::unordered_set<uint32_t> knownCreatureSet;
 
 		void connect(uint32_t playerId, OperatingSystem_t operatingSystem);
 		void disconnect();
 		void disconnectClient(const std::string& message);
+
 		void writeToOutputBuffer(const NetworkMessage& msg, bool broadcast = true);
 
 		virtual void releaseProtocol();
@@ -428,7 +435,6 @@ class ProtocolGame : public Protocol
 		static LiveCastsMap m_liveCasts; ///< Stores all available casts.
 
 		bool m_isLiveCaster; ///< Determines if this \ref ProtocolGame object is casting
-		bool m_isSpectator; ///< Determines if this \ref ProtocolGame object is a spectator
 
 		///< list of spectators \warning This variable should only be accessed after locking \ref liveCastLock
 		std::vector<ProtocolGame*> m_spectators;

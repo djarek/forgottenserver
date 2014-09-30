@@ -347,7 +347,7 @@ bool Connection::send(OutputMessage_ptr msg)
 
 	if (m_pendingWrite == 0) {
 		auto unencryptedCopy = msg->getUnencryptedCopy();
-		if(msg->isBroadcastMsg() && unencryptedCopy){
+		if (msg->isBroadcastMsg() && unencryptedCopy) {
 			unencryptedCopy->append(msg);
 		}
 		msg->getProtocol()->onSendMessage(msg);
@@ -397,16 +397,16 @@ void Connection::onWriteOperation(OutputMessage_ptr msg, const boost::system::er
 	m_connectionLock.lock();
 	m_writeTimer.cancel();
 
-	if(msg->isBroadcastMsg()){
-		auto client = dynamic_cast<ProtocolGame*>(m_protocol);
-		if(client){
+	if (msg->isBroadcastMsg()) {
+		const auto client = dynamic_cast<ProtocolGame*>(m_protocol);
+		if (client) {
 			std::lock_guard<decltype(client->liveCastLock)> lockGuard(client->liveCastLock);
 
-			auto spectators = client->getLiveCastSpectators();
-			auto unencryptedMsg = msg->getUnencryptedCopy();
+			const auto&  spectators = client->getLiveCastSpectators();
+			const auto unencryptedMsg = msg->getUnencryptedCopy();
 
-			if(unencryptedMsg){
-				for(auto& spectator : spectators){
+			if (unencryptedMsg) {
+				for (const auto spectator : spectators) {
 					auto newMsg = OutputMessagePool::getInstance()->getOutputMessage(spectator, false);
 					newMsg->append(unencryptedMsg);
 					spectator->getConnection()->send(newMsg);

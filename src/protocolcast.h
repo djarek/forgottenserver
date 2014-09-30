@@ -17,39 +17,45 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef FS_PROTOCOLLOGIN_H_1238F4B473074DF2ABC595C29E81C46D
-#define FS_PROTOCOLLOGIN_H_1238F4B473074DF2ABC595C29E81C46D
+#ifndef FS_PROTOCOLCAST_H
+#define FS_PROTOCOLCAST_H
 
-#include "protocol.h"
+#include "protocolgame.h"
 
-class NetworkMessage;
-class OutputMessage;
 
-class ProtocolLogin : public Protocol
+class ProtocolCast : public ProtocolGame
 {
 	public:
-		// static protocol information
-		enum {server_sends_first = false};
-		enum {protocol_identifier = 0x01};
-		enum {use_checksum = true};
 		static const char* protocol_name() {
-			return "login protocol";
+			return "casting protocol";
 		}
 
-		ProtocolLogin(Connection_ptr connection) : Protocol(connection) {}
-		virtual ~ProtocolLogin() {}
+		ProtocolCast(Connection_ptr connection);
+		virtual ~ProtocolCast();
 
 		virtual int32_t getProtocolId() {
-			return 0x01;
+			return 0x0A;
 		}
 
-		virtual void onRecvFirstMessage(NetworkMessage& msg);
+	private:
 
-	protected:
-		void disconnectClient(const std::string& message);
-		void getCastingStreamsList(const std::string& password);
-		void getCharacterList(const std::string& accountName, const std::string& password);
-		void addWorldInfo(OutputMessage_ptr& output, bool isLiveCastLogin = false);
+		ProtocolGame* client;
+
+		void login(const std::string& liveCastName, const std::string& liveCastPassword);
+		void logout();
+		
+		void disconnectSpectator(const std::string& message);
+		void writeToOutputBuffer(const NetworkMessage& msg);
+		
+		void syncKnownCreatureSets();
+		void syncChatChannels();
+		
+		virtual void releaseProtocol();
+		virtual void deleteProtocolTask();
+
+		virtual void parsePacket(NetworkMessage& msg);
+		virtual void onRecvFirstMessage(NetworkMessage& msg);
+		
 };
 
 #endif

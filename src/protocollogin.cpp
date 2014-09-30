@@ -47,7 +47,7 @@ void ProtocolLogin::disconnectClient(const std::string& message)
 	getConnection()->closeConnection();
 }
 
-void ProtocolLogin::addWorldInfo(OutputMessage_ptr& output)
+void ProtocolLogin::addWorldInfo(OutputMessage_ptr& output, bool isLiveCastLogin /*=false*/)
 {
 	//Add MOTD
 	output->AddByte(0x14);
@@ -64,7 +64,13 @@ void ProtocolLogin::addWorldInfo(OutputMessage_ptr& output)
 	output->AddByte(0); // world id
 	output->AddString(g_config.getString(ConfigManager::SERVER_NAME));
 	output->AddString(g_config.getString(ConfigManager::IP));
-	output->add<uint16_t>(g_config.getNumber(ConfigManager::GAME_PORT));
+
+	if (!isLiveCastLogin) {
+		output->add<uint16_t>(g_config.getNumber(ConfigManager::GAME_PORT));
+	} else {
+		output->add<uint16_t>(g_config.getNumber(ConfigManager::LIVE_CAST_PORT));
+	}
+
 	output->AddByte(0);
 }
 
@@ -72,9 +78,9 @@ void ProtocolLogin::getCastingStreamsList(const std::string& password)
 {
 	OutputMessage_ptr output = OutputMessagePool::getInstance()->getOutputMessage(this, false);
 	if (output) {
-		addWorldInfo(output);
+		addWorldInfo(output, true);
 
-		auto casts = ProtocolGame::getLiveCasts();
+		const auto casts = ProtocolGame::getLiveCasts();
 		output->AddByte((uint8_t)casts.size());
 
 		for(const auto& cast : casts)

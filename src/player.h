@@ -1160,12 +1160,20 @@ class Player : public Creature, public Cylinder
 		void forgetInstantSpell(const std::string& name);
 		bool hasLearnedInstantSpell(const std::string& name) const;
 
-		bool startLiveCast(const std::string& password){
-			return client->startLiveCast(password);
+		bool startLiveCast(const std::string& password) {
+			if (client) {
+				return client->startLiveCast(password);
+			} else {
+				return false;
+			}
 		}
 
-		bool stopLiveCast(){
-			return client->stopLiveCast();
+		bool stopLiveCast() {
+			if (client) {
+				return client->stopLiveCast();
+			} else {
+				return false;
+			}
 		}
 
 	protected:

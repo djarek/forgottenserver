@@ -38,6 +38,7 @@
 #include "tools.h"
 #include "rsa.h"
 #include "protocolgame.h"
+#include "protocolcast.h"
 #include "protocolold.h"
 #include "protocollogin.h"
 #include "protocolstatus.h"
@@ -273,6 +274,7 @@ void mainLoader(int, char*[], ServiceManager* services)
 
 	// Game client protocols
 	services->add<ProtocolGame>(g_config.getNumber(ConfigManager::GAME_PORT));
+	services->add<ProtocolCast>(g_config.getNumber(ConfigManager::LIVE_CAST_PORT));
 	services->add<ProtocolLogin>(g_config.getNumber(ConfigManager::LOGIN_PORT));
 
 	// OT protocols

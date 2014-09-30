@@ -91,19 +91,19 @@ class OutputMessage : public NetworkMessage
 			m_frame = frame;
 		}
 
-		void setBroadcastMsg(bool isBroadcast){
+		void setBroadcastMsg(bool isBroadcast) {
 			m_isBroadcastMsg = isBroadcast;
 		}
 
-		bool isBroadcastMsg(){
+		bool isBroadcastMsg() {
 			return m_isBroadcastMsg;
 		}
 
-		OutputMessage_ptr getUnencryptedCopy(){
+		OutputMessage_ptr getUnencryptedCopy() {
 			return m_unencryptedCopy;
 		}
 
-		void setUnencryptedCopy(OutputMessage_ptr msg){
+		void setUnencryptedCopy(OutputMessage_ptr msg) {
 			m_unencryptedCopy = msg;
 		}
 

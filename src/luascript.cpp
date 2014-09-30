@@ -9555,14 +9555,16 @@ int32_t LuaScriptInterface::luaPlayerGetContainerIndex(lua_State* L)
 int32_t LuaScriptInterface::luaPlayerStartLiveCast(lua_State* L)
 {
 	Player* player = getUserdata<Player>(L, 1);
-	if(!player){
+	if (!player) {
 		lua_pushnil(L);
 		return 1;
 	}
 
-	std::string password = "";
-	if(lua_gettop(L) == 2)
+	std::string password;
+	if (lua_gettop(L) == 2) {
 		password = getString(L, 2);
+	}
+
 	lua_pushboolean(L, player->startLiveCast(password));
 	return 1;
 }
@@ -9570,7 +9572,7 @@ int32_t LuaScriptInterface::luaPlayerStartLiveCast(lua_State* L)
 int32_t LuaScriptInterface::luaPlayerStopLiveCast(lua_State* L)
 {
 	Player* player = getUserdata<Player>(L, 1);
-	if(!player){
+	if (!player) {
 		lua_pushnil(L);
 		return 1;
 	}
