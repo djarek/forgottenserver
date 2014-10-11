@@ -163,6 +163,7 @@ void ProtocolCast::syncChatChannels()
 			sendChannel(channel->getId(), channel->getName(), &channelUsers, channel->getInvitedUsersPtr());
 		}
 	}
+	sendChannel(CHANNEL_CAST, LIVE_CAST_CHAT_NAME, nullptr, nullptr);
 }
 
 void ProtocolCast::login(const std::string& liveCastName, const std::string& liveCastPassword)
@@ -235,10 +236,11 @@ void ProtocolCast::parsePacket(NetworkMessage& msg)
 		return;
 	}
 
-    switch(recvbyte) {
+	switch(recvbyte) {
 		case 0x14: g_dispatcher.addTask(createTask(std::bind(&ProtocolCast::logout, this))); break;
 		case 0x1D: g_dispatcher.addTask(createTask(std::bind(&ProtocolCast::sendPingBack, this))); break;
 		case 0x1E: g_dispatcher.addTask(createTask(std::bind(&ProtocolCast::sendPing, this))); break;
+		case 0x96: parseSpectatorSay(msg); break;
 		default:
 			break;
 	}
@@ -248,9 +250,30 @@ void ProtocolCast::parsePacket(NetworkMessage& msg)
 	}
 }
 
+void ProtocolCast::parseSpectatorSay(NetworkMessage& msg)
+{
+	SpeakClasses type = (SpeakClasses)msg.GetByte();
+
+	uint16_t channelId = 0;
+
+	if (type == TALKTYPE_CHANNEL_Y) {
+		channelId = msg.get<uint16_t>();
+	} else {
+		return;
+	}
+
+	const std::string text = msg.GetString();
+
+	if (text.length() > 255 || channelId != CHANNEL_CAST || !client) {
+		return;
+	}
+
+	g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::broadcastSpectatorMessage, client, text)));
+}
+
 void ProtocolCast::releaseProtocol()
 {
-    if (client) {
+	if (client) {
 		client->removeSpectator(this);
 		client = nullptr;
 		player = nullptr;

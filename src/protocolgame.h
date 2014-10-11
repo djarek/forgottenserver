@@ -91,12 +91,6 @@ class ProtocolGame : public Protocol
 			return knownCreatureSet;
 		}
 
-		/** \brief Handles the login of a live cast spectator.
-		 *  \param liveCastName name of the live cast (which is also the name of the caster)
-		 *  \param liveCastPassword optional password for the live cast
-		 */
-		void liveCastLogin(const std::string& liveCastName, const std::string& liveCastPassword);
-
 		/** \brief Adds a spectator from the spectators vector.
 		 *  \param client pointer to the \ref ProtocolGame object representing the spectator
 		 */
@@ -160,6 +154,9 @@ class ProtocolGame : public Protocol
 			}
 		}
 
+		/** \brief Gets the live cast password
+		 *  \returns A string containing the live cast password
+		 */
 		const std::string& getLiveCastPassword() const {
 			return m_liveCastPassword;
 		}
@@ -169,6 +166,14 @@ class ProtocolGame : public Protocol
 		 */
 		static const LiveCastsMap& getLiveCasts() {
 			return m_liveCasts;
+		}
+
+		/** \brief Allows spectators to send text messages to the caster
+		 *   and then get broadcast to the rest of the spectators
+		 *  \param text string containing the text message
+		 */
+		void broadcastSpectatorMessage(const std::string& text) {
+			sendChannelMessage("Spectator", text, TALKTYPE_CHANNEL_Y, CHANNEL_CAST);
 		}
 
 	protected:

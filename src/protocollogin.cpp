@@ -74,7 +74,7 @@ void ProtocolLogin::addWorldInfo(OutputMessage_ptr& output, bool isLiveCastLogin
 	output->AddByte(0);
 }
 
-void ProtocolLogin::getCastingStreamsList(const std::string& password)
+void ProtocolLogin::getCastingStreamsList()
 {
 	OutputMessage_ptr output = OutputMessagePool::getInstance()->getOutputMessage(this, false);
 	if (output) {
@@ -202,10 +202,11 @@ void ProtocolLogin::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	if (accountName.empty()) {
-		if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING))
+		if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING)) {
 			dispatchDisconnectClient("Invalid account name.");
-		else
-			g_dispatcher.addTask(createTask(std::bind(&ProtocolLogin::getCastingStreamsList, this, password)));
+		} else {
+			g_dispatcher.addTask(createTask(std::bind(&ProtocolLogin::getCastingStreamsList, this)));
+		}
 		return;
 	}
 

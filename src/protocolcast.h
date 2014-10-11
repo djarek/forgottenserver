@@ -55,7 +55,9 @@ class ProtocolCast : public ProtocolGame
 
 		virtual void parsePacket(NetworkMessage& msg);
 		virtual void onRecvFirstMessage(NetworkMessage& msg);
-		
+
+		void parseSpectatorSay(NetworkMessage& msg);
+
 };
 
 #endif

@@ -305,6 +305,8 @@ bool ProtocolGame::startLiveCast(const std::string& password /*= ""*/)
 
 	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
 
+	//Send a "dummy" channel
+	sendChannel(CHANNEL_CAST, LIVE_CAST_CHAT_NAME, nullptr, nullptr);
 	m_liveCastPassword = password;
 	m_spectators.clear();
 	m_isLiveCaster = true;
@@ -1004,7 +1006,11 @@ void ProtocolGame::parseSay(NetworkMessage& msg)
 		return;
 	}
 
-	addGameTask(&Game::playerSay, player->getID(), channelId, type, receiver, text);
+	if (channelId == CHANNEL_CAST) {
+		g_dispatcher.addTask(createTask(std::bind(&ProtocolGame::sendChannelMessage, this, player->getName(), text, TALKTYPE_CHANNEL_R1, channelId)));
+	} else {
+		addGameTask(&Game::playerSay, player->getID(), channelId, type, receiver, text);
+	}
 }
 
 void ProtocolGame::parseFightModes(NetworkMessage& msg)
