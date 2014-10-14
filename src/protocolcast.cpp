@@ -136,7 +136,6 @@ void ProtocolCast::onRecvFirstMessage(NetworkMessage& msg)
 
 void ProtocolCast::syncKnownCreatureSets()
 {
-	NetworkMessage msg;
 	const auto& casterKnownCreatures = client->getKnownCreatures();
 	const auto playerStackPos = player->getTile()->getStackposOfCreature(player, player);
 
@@ -147,11 +146,12 @@ void ProtocolCast::syncKnownCreatureSets()
 				continue;
 			}
 
+			NetworkMessage msg;
 			sendAddCreature(creature, player->getPosition(), playerStackPos, false);
 			RemoveTileThing(msg, player->getPosition(), playerStackPos);
+			writeToOutputBuffer(msg);
 		}
 	}
-	writeToOutputBuffer(msg);
 }
 
 void ProtocolCast::syncChatChannels()

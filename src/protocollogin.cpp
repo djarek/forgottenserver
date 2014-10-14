@@ -65,10 +65,10 @@ void ProtocolLogin::addWorldInfo(OutputMessage_ptr& output, bool isLiveCastLogin
 	output->AddString(g_config.getString(ConfigManager::SERVER_NAME));
 	output->AddString(g_config.getString(ConfigManager::IP));
 
-	if (!isLiveCastLogin) {
-		output->add<uint16_t>(g_config.getNumber(ConfigManager::GAME_PORT));
-	} else {
+	if (isLiveCastLogin) {
 		output->add<uint16_t>(g_config.getNumber(ConfigManager::LIVE_CAST_PORT));
+	} else {
+		output->add<uint16_t>(g_config.getNumber(ConfigManager::GAME_PORT));
 	}
 
 	output->AddByte(0);
