@@ -47,7 +47,7 @@
 #include "scheduler.h"
 #include "raids.h"
 
-extern Chat g_chat;
+extern Chat* g_chat;
 extern Game g_game;
 extern Monsters g_monsters;
 extern ConfigManager g_config;
@@ -87,16 +87,20 @@ void ScriptEnvironment::resetEnv()
 	m_timerEvent = false;
 	m_interface = nullptr;
 	m_localMap.clear();
+	m_tempResults.clear();
 
-	for (const auto& it : m_tempItems) {
-		for (Item* item : it.second) {
-			if (item->getParent() == VirtualCylinder::virtualCylinder) {
-				g_game.ReleaseItem(item);
-			}
+	auto it = m_tempItems.find(this);
+	if (it == m_tempItems.end()) {
+		return;
+	}
+
+	ItemList& itemList = it->second;
+	for (Item* item : itemList) {
+		if (item->getParent() == VirtualCylinder::virtualCylinder) {
+			g_game.ReleaseItem(item);
 		}
 	}
-	m_tempItems.clear();
-	m_tempResults.clear();
+	itemList.clear();
 }
 
 bool ScriptEnvironment::setCallbackId(int32_t callbackId, LuaScriptInterface* scriptInterface)
@@ -275,16 +279,6 @@ void ScriptEnvironment::addTempItem(ScriptEnvironment* env, Item* item)
 	m_tempItems[env].push_back(item);
 }
 
-void ScriptEnvironment::removeTempItem(ScriptEnvironment* env, Item* item)
-{
-	ItemList& itemList = m_tempItems[env];
-
-	auto it = std::find(itemList.begin(), itemList.end(), item);
-	if (it != itemList.end()) {
-		itemList.erase(it);
-	}
-}
-
 void ScriptEnvironment::removeTempItem(Item* item)
 {
 	for (auto& it : m_tempItems) {
@@ -348,13 +342,13 @@ int32_t LuaScriptInterface::m_scriptEnvIndex = -1;
 
 LuaScriptInterface::LuaScriptInterface(const std::string& interfaceName)
 {
-	if (interfaceName != "Main Interface" && !g_luaEnvironment.getLuaState()) {
-		g_luaEnvironment.initState();
-	}
-
 	m_eventTableRef = -1;
 	m_luaState = nullptr;
 	m_interfaceName = interfaceName;
+
+	if (!g_luaEnvironment.getLuaState()) {
+		g_luaEnvironment.initState();
+	}
 }
 
 LuaScriptInterface::~LuaScriptInterface()
@@ -365,7 +359,6 @@ LuaScriptInterface::~LuaScriptInterface()
 bool LuaScriptInterface::reInitState()
 {
 	g_luaEnvironment.clearCombatObjects(this);
-	g_luaEnvironment.clearConditionObjects(this);
 	g_luaEnvironment.clearAreaObjects(this);
 
 	closeState();
@@ -726,9 +719,43 @@ int32_t LuaScriptInterface::popCallback(lua_State* L)
 }
 
 // Metatables
-void LuaScriptInterface::setMetatable(lua_State* L, int32_t index, const std::string& string)
+void LuaScriptInterface::setMetatable(lua_State* L, int32_t index, const std::string& name)
 {
-	luaL_getmetatable(L, string.c_str());
+	luaL_getmetatable(L, name.c_str());
+	lua_setmetatable(L, index - 1);
+}
+
+void LuaScriptInterface::setWeakMetatable(lua_State* L, int32_t index, const std::string& name)
+{
+	static std::set<std::string> weakObjectTypes;
+	const std::string& weakName = name + "_weak";
+	if (weakObjectTypes.find(name) == weakObjectTypes.end()) {
+		luaL_getmetatable(L, name.c_str());
+		int32_t childMetatable = lua_gettop(L);
+
+		luaL_newmetatable(L, weakName.c_str());
+		int32_t metatable = lua_gettop(L);
+
+		static const std::vector<std::string> methodKeys = {"__index", "__metatable", "__eq"};
+		for (const std::string& metaKey : methodKeys) {
+			lua_getfield(L, childMetatable, metaKey.c_str());
+			lua_setfield(L, metatable, metaKey.c_str());
+		}
+
+		static const std::vector<int32_t> methodIndexes = {'h', 'p', 't'};
+		for (int32_t metaIndex : methodIndexes) {
+			lua_rawgeti(L, childMetatable, metaIndex);
+			lua_rawseti(L, metatable, metaIndex);
+		}
+
+		lua_pushnil(L);
+		lua_setfield(L, metatable, "__gc");
+
+		lua_remove(L, childMetatable);
+		weakObjectTypes.insert(name);
+	} else {
+		luaL_getmetatable(L, weakName.c_str());
+	}
 	lua_setmetatable(L, index - 1);
 }
 
@@ -1688,6 +1715,104 @@ void LuaScriptInterface::registerFunctions()
 	registerEnum(ORIGIN_SPELL)
 	registerEnum(ORIGIN_MELEE)
 	registerEnum(ORIGIN_RANGED)
+	
+	// Use with house:getAccessList, house:setAccessList
+	registerEnum(GUEST_LIST)
+	registerEnum(SUBOWNER_LIST)
+
+	// Use with npc:setSpeechBubble
+	registerEnum(SPEECHBUBBLE_NONE)
+	registerEnum(SPEECHBUBBLE_NORMAL)
+	registerEnum(SPEECHBUBBLE_TRADE)
+	registerEnum(SPEECHBUBBLE_QUEST)
+	registerEnum(SPEECHBUBBLE_QUESTTRADER)
+
+	// Use with player:addMapMark
+	registerEnum(MAPMARK_TICK)
+	registerEnum(MAPMARK_QUESTION)
+	registerEnum(MAPMARK_EXCLAMATION)
+	registerEnum(MAPMARK_STAR)
+	registerEnum(MAPMARK_CROSS)
+	registerEnum(MAPMARK_TEMPLE)
+	registerEnum(MAPMARK_KISS)
+	registerEnum(MAPMARK_SHOVEL)
+	registerEnum(MAPMARK_SWORD)
+	registerEnum(MAPMARK_FLAG)
+	registerEnum(MAPMARK_LOCK)
+	registerEnum(MAPMARK_BAG)
+	registerEnum(MAPMARK_SKULL)
+	registerEnum(MAPMARK_DOLLAR)
+	registerEnum(MAPMARK_REDNORTH)
+	registerEnum(MAPMARK_REDSOUTH)
+	registerEnum(MAPMARK_REDEAST)
+	registerEnum(MAPMARK_REDWEST)
+	registerEnum(MAPMARK_GREENNORTH)
+	registerEnum(MAPMARK_GREENSOUTH)
+
+	// Use with Game.getReturnMessage
+	registerEnum(RETURNVALUE_NOERROR)
+	registerEnum(RETURNVALUE_NOTPOSSIBLE)
+	registerEnum(RETURNVALUE_NOTENOUGHROOM)
+	registerEnum(RETURNVALUE_PLAYERISPZLOCKED)
+	registerEnum(RETURNVALUE_PLAYERISNOTINVITED)
+	registerEnum(RETURNVALUE_CANNOTTHROW)
+	registerEnum(RETURNVALUE_THEREISNOWAY)
+	registerEnum(RETURNVALUE_DESTINATIONOUTOFREACH)
+	registerEnum(RETURNVALUE_CREATUREBLOCK)
+	registerEnum(RETURNVALUE_NOTMOVEABLE)
+	registerEnum(RETURNVALUE_DROPTWOHANDEDITEM)
+	registerEnum(RETURNVALUE_BOTHHANDSNEEDTOBEFREE)
+	registerEnum(RETURNVALUE_CANONLYUSEONEWEAPON)
+	registerEnum(RETURNVALUE_NEEDEXCHANGE)
+	registerEnum(RETURNVALUE_CANNOTBEDRESSED)
+	registerEnum(RETURNVALUE_PUTTHISOBJECTINYOURHAND)
+	registerEnum(RETURNVALUE_PUTTHISOBJECTINBOTHHANDS)
+	registerEnum(RETURNVALUE_TOOFARAWAY)
+	registerEnum(RETURNVALUE_FIRSTGODOWNSTAIRS)
+	registerEnum(RETURNVALUE_FIRSTGOUPSTAIRS)
+	registerEnum(RETURNVALUE_CONTAINERNOTENOUGHROOM)
+	registerEnum(RETURNVALUE_NOTENOUGHCAPACITY)
+	registerEnum(RETURNVALUE_CANNOTPICKUP)
+	registerEnum(RETURNVALUE_THISISIMPOSSIBLE)
+	registerEnum(RETURNVALUE_DEPOTISFULL)
+	registerEnum(RETURNVALUE_CREATUREDOESNOTEXIST)
+	registerEnum(RETURNVALUE_CANNOTUSETHISOBJECT)
+	registerEnum(RETURNVALUE_PLAYERWITHTHISNAMEISNOTONLINE)
+	registerEnum(RETURNVALUE_NOTREQUIREDLEVELTOUSERUNE)
+	registerEnum(RETURNVALUE_YOUAREALREADYTRADING)
+	registerEnum(RETURNVALUE_THISPLAYERISALREADYTRADING)
+	registerEnum(RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT)
+	registerEnum(RETURNVALUE_DIRECTPLAYERSHOOT)
+	registerEnum(RETURNVALUE_NOTENOUGHLEVEL)
+	registerEnum(RETURNVALUE_NOTENOUGHMAGICLEVEL)
+	registerEnum(RETURNVALUE_NOTENOUGHMANA)
+	registerEnum(RETURNVALUE_NOTENOUGHSOUL)
+	registerEnum(RETURNVALUE_YOUAREEXHAUSTED)
+	registerEnum(RETURNVALUE_PLAYERISNOTREACHABLE)
+	registerEnum(RETURNVALUE_CANONLYUSETHISRUNEONCREATURES)
+	registerEnum(RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE)
+	registerEnum(RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER)
+	registerEnum(RETURNVALUE_YOUMAYNOTATTACKAPERSONINPROTECTIONZONE)
+	registerEnum(RETURNVALUE_YOUMAYNOTATTACKAPERSONWHILEINPROTECTIONZONE)
+	registerEnum(RETURNVALUE_YOUMAYNOTATTACKTHISCREATURE)
+	registerEnum(RETURNVALUE_YOUCANONLYUSEITONCREATURES)
+	registerEnum(RETURNVALUE_CREATUREISNOTREACHABLE)
+	registerEnum(RETURNVALUE_TURNSECUREMODETOATTACKUNMARKEDPLAYERS)
+	registerEnum(RETURNVALUE_YOUNEEDPREMIUMACCOUNT)
+	registerEnum(RETURNVALUE_YOUNEEDTOLEARNTHISSPELL)
+	registerEnum(RETURNVALUE_YOURVOCATIONCANNOTUSETHISSPELL)
+	registerEnum(RETURNVALUE_YOUNEEDAWEAPONTOUSETHISSPELL)
+	registerEnum(RETURNVALUE_PLAYERISPZLOCKEDLEAVEPVPZONE)
+	registerEnum(RETURNVALUE_PLAYERISPZLOCKEDENTERPVPZONE)
+	registerEnum(RETURNVALUE_ACTIONNOTPERMITTEDINANOPVPZONE)
+	registerEnum(RETURNVALUE_YOUCANNOTLOGOUTHERE)
+	registerEnum(RETURNVALUE_YOUNEEDAMAGICITEMTOCASTSPELL)
+	registerEnum(RETURNVALUE_CANNOTCONJUREITEMHERE)
+	registerEnum(RETURNVALUE_YOUNEEDTOSPLITYOURSPEARS)
+	registerEnum(RETURNVALUE_NAMEISTOOAMBIGIOUS)
+	registerEnum(RETURNVALUE_CANONLYUSEONESHIELD)
+	registerEnum(RETURNVALUE_NOPARTYMEMBERSINRANGE)
+	registerEnum(RETURNVALUE_YOUARENOTTHEOWNER)
 
 	// _G
 	registerGlobalVariable("INDEX_WHEREEVER", INDEX_WHEREEVER);
@@ -1890,6 +2015,7 @@ void LuaScriptInterface::registerFunctions()
 	registerClass("ModalWindow", "", LuaScriptInterface::luaModalWindowCreate);
 	registerMetaMethod("ModalWindow", "__eq", LuaScriptInterface::luaUserdataCompare);
 	registerMetaMethod("ModalWindow", "__gc", LuaScriptInterface::luaModalWindowDelete);
+	registerMethod("ModalWindow", "delete", LuaScriptInterface::luaModalWindowDelete);
 
 	registerMethod("ModalWindow", "getId", LuaScriptInterface::luaModalWindowGetId);
 	registerMethod("ModalWindow", "getTitle", LuaScriptInterface::luaModalWindowGetTitle);
@@ -2405,6 +2531,8 @@ void LuaScriptInterface::registerFunctions()
 	// Condition
 	registerClass("Condition", "", LuaScriptInterface::luaConditionCreate);
 	registerMetaMethod("Condition", "__eq", LuaScriptInterface::luaUserdataCompare);
+	registerMetaMethod("Condition", "__gc", LuaScriptInterface::luaConditionDelete);
+	registerMethod("Condition", "delete", LuaScriptInterface::luaConditionDelete);
 
 	registerMethod("Condition", "getId", LuaScriptInterface::luaConditionGetId);
 	registerMethod("Condition", "getSubId", LuaScriptInterface::luaConditionGetSubId);
@@ -2419,9 +2547,9 @@ void LuaScriptInterface::registerFunctions()
 
 	registerMethod("Condition", "setParameter", LuaScriptInterface::luaConditionSetParameter);
 	registerMethod("Condition", "setFormula", LuaScriptInterface::luaConditionSetFormula);
+	registerMethod("Condition", "setOutfit", LuaScriptInterface::luaConditionSetOutfit);
 
 	registerMethod("Condition", "addDamage", LuaScriptInterface::luaConditionAddDamage);
-	registerMethod("Condition", "addOutfit", LuaScriptInterface::luaConditionAddOutfit);
 
 	// MonsterType
 	registerClass("MonsterType", "", LuaScriptInterface::luaMonsterTypeCreate);
@@ -2745,7 +2873,7 @@ int32_t LuaScriptInterface::luaDoPlayerAddItem(lua_State* L)
 		}
 
 		ReturnValue ret = g_game.internalPlayerAddItem(player, newItem, canDropOnMap);
-		if (ret != RET_NOERROR) {
+		if (ret != RETURNVALUE_NOERROR) {
 			delete newItem;
 			pushBoolean(L, false);
 			return 1;
@@ -2904,7 +3032,7 @@ int32_t LuaScriptInterface::luaDoCreateItem(lua_State* L)
 		}
 
 		ReturnValue ret = g_game.internalAddItem(tile, newItem, INDEX_WHEREEVER, FLAG_NOLIMIT);
-		if (ret != RET_NOERROR) {
+		if (ret != RETURNVALUE_NOERROR) {
 			delete newItem;
 			pushBoolean(L, false);
 			return 1;
@@ -3079,7 +3207,7 @@ int32_t LuaScriptInterface::luaCreateConditionObject(lua_State* L)
 	ConditionType_t type = getNumber<ConditionType_t>(L, -1);
 
 	uint32_t id;
-	if (g_luaEnvironment.createConditionObject(env->getScriptInterface(), type, CONDITIONID_COMBAT, id)) {
+	if (g_luaEnvironment.createConditionObject(type, CONDITIONID_COMBAT, id)) {
 		lua_pushnumber(L, id);
 	} else {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_CONDITION_NOT_FOUND));
@@ -3249,7 +3377,7 @@ int32_t LuaScriptInterface::luaAddOutfitCondition(lua_State* L)
 		outfit.lookFeet = getNumber<uint32_t>(L, 7);
 		outfit.lookAddons = getNumber<uint32_t>(L, 8, outfit.lookAddons);
 		outfit.lookMount = getNumber<uint32_t>(L, 9, outfit.lookMount);
-		condition->addOutfit(outfit);
+		condition->setOutfit(outfit);
 		pushBoolean(L, true);
 	} else {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_CONDITION_NOT_FOUND));
@@ -3761,7 +3889,7 @@ int32_t LuaScriptInterface::luaSetCreatureOutfit(lua_State* L)
 
 	Outfit_t outfit = getOutfit(L, 2);
 	int32_t time = getNumber<int32_t>(L, 3);
-	pushBoolean(L, Spell::CreateIllusion(creature, outfit, time) == RET_NOERROR);
+	pushBoolean(L, Spell::CreateIllusion(creature, outfit, time) == RETURNVALUE_NOERROR);
 	return 1;
 }
 
@@ -3777,7 +3905,7 @@ int32_t LuaScriptInterface::luaSetMonsterOutfit(lua_State* L)
 
 	std::string name = getString(L, 2);
 	int32_t time = getNumber<int32_t>(L, 3);
-	pushBoolean(L, Spell::CreateIllusion(creature, name, time) == RET_NOERROR);
+	pushBoolean(L, Spell::CreateIllusion(creature, name, time) == RETURNVALUE_NOERROR);
 	return 1;
 }
 
@@ -3793,7 +3921,7 @@ int32_t LuaScriptInterface::luaSetItemOutfit(lua_State* L)
 
 	uint32_t item = getNumber<uint32_t>(L, 2);
 	int32_t time = getNumber<int32_t>(L, 3);
-	pushBoolean(L, Spell::CreateIllusion(creature, item, time) == RET_NOERROR);
+	pushBoolean(L, Spell::CreateIllusion(creature, item, time) == RETURNVALUE_NOERROR);
 	return 1;
 }
 
@@ -3897,7 +4025,7 @@ int32_t LuaScriptInterface::luaDoAddContainerItem(lua_State* L)
 		}
 
 		ReturnValue ret = g_game.internalAddItem(container, newItem);
-		if (ret != RET_NOERROR) {
+		if (ret != RETURNVALUE_NOERROR) {
 			delete newItem;
 			pushBoolean(L, false);
 			return 1;
@@ -4234,7 +4362,7 @@ int32_t LuaScriptInterface::luaSendChannelMessage(lua_State* L)
 {
 	//sendChannelMessage(channelId, type, message)
 	uint32_t channelId = getNumber<uint32_t>(L, 1);
-	ChatChannel* channel = g_chat.getChannelById(channelId);
+	ChatChannel* channel = g_chat->getChannelById(channelId);
 	if (!channel) {
 		pushBoolean(L, false);
 		return 1;
@@ -4251,7 +4379,7 @@ int32_t LuaScriptInterface::luaSendGuildChannelMessage(lua_State* L)
 {
 	//sendGuildChannelMessage(guildId, type, message)
 	uint32_t guildId = getNumber<uint32_t>(L, 1);
-	ChatChannel* channel = g_chat.getGuildChannelById(guildId);
+	ChatChannel* channel = g_chat->getGuildChannelById(guildId);
 	if (!channel) {
 		pushBoolean(L, false);
 		return 1;
@@ -4570,7 +4698,7 @@ int32_t LuaScriptInterface::luaGameLoadMap(lua_State* L)
 	// Game.loadMap(path)
 	const std::string& path = getString(L, 1);
 	g_dispatcher.addTask(createTask(std::bind(&Game::loadMap, &g_game, path)));
-	return 1;
+	return 0;
 }
 
 int32_t LuaScriptInterface::luaGameGetExperienceStage(lua_State* L)
@@ -6316,7 +6444,7 @@ int32_t LuaScriptInterface::luaItemRemove(lua_State* L)
 	Item* item = getUserdata<Item>(L, 1);
 	if (item) {
 		int32_t count = getNumber<int32_t>(L, 2, -1);
-		pushBoolean(L, g_game.internalRemoveItem(item, count) == RET_NOERROR);
+		pushBoolean(L, g_game.internalRemoveItem(item, count) == RETURNVALUE_NOERROR);
 	} else {
 		lua_pushnil(L);
 	}
@@ -6594,14 +6722,14 @@ int32_t LuaScriptInterface::luaItemMoveTo(lua_State* L)
 	}
 
 	if (item->getParent() == VirtualCylinder::virtualCylinder) {
-		pushBoolean(L, g_game.internalAddItem(tile, item) == RET_NOERROR);
+		pushBoolean(L, g_game.internalAddItem(tile, item) == RETURNVALUE_NOERROR);
 	} else {
 		Item* moveItem = nullptr;
 		ReturnValue ret = g_game.internalMoveItem(item->getParent(), tile, INDEX_WHEREEVER, item, item->getItemCount(), &moveItem, FLAG_NOLIMIT | FLAG_IGNOREBLOCKITEM | FLAG_IGNOREBLOCKCREATURE | FLAG_IGNORENOTMOVEABLE);
 		if (moveItem) {
 			*itemPtr = moveItem;
 		}
-		pushBoolean(L, ret == RET_NOERROR);
+		pushBoolean(L, ret == RETURNVALUE_NOERROR);
 	}
 	return 1;
 }
@@ -6845,7 +6973,7 @@ int32_t LuaScriptInterface::luaContainerAddItem(lua_State* L)
 	uint32_t flags = getNumber<uint32_t>(L, 5, 0);
 
 	ReturnValue ret = g_game.internalAddItem(container, item, index, flags);
-	if (ret == RET_NOERROR) {
+	if (ret == RETURNVALUE_NOERROR) {
 		pushUserdata<Item>(L, item);
 		setItemMetatable(L, -1, item);
 	} else {
@@ -6879,7 +7007,7 @@ int32_t LuaScriptInterface::luaContainerAddItemEx(lua_State* L)
 	int32_t index = getNumber<int32_t>(L, 3, INDEX_WHEREEVER);
 	uint32_t flags = getNumber<uint32_t>(L, 4, 0);
 	ReturnValue ret = g_game.internalAddItem(container, item, index, flags);
-	if (ret == RET_NOERROR) {
+	if (ret == RETURNVALUE_NOERROR) {
 		getScriptEnv()->removeTempItem(item);
 	}
 	lua_pushnumber(L, ret);
@@ -7576,7 +7704,7 @@ int32_t LuaScriptInterface::luaCreatureGetCondition(lua_State* L)
 	Condition* condition = creature->getCondition(conditionType, conditionId, subId);
 	if (condition) {
 		pushUserdata<Condition>(L, condition);
-		setMetatable(L, -1, "Condition");
+		setWeakMetatable(L, -1, "Condition");
 	} else {
 		lua_pushnil(L);
 	}
@@ -7666,7 +7794,7 @@ int32_t LuaScriptInterface::luaCreatureTeleportTo(lua_State* L)
 	}
 
 	const Position oldPosition = creature->getPosition();
-	if (g_game.internalTeleport(creature, position, pushMovement) != RET_NOERROR) {
+	if (g_game.internalTeleport(creature, position, pushMovement) != RETURNVALUE_NOERROR) {
 		pushBoolean(L, false);
 		return 1;
 	}
@@ -7825,7 +7953,7 @@ int32_t LuaScriptInterface::luaPlayerCreate(lua_State* L)
 		player = g_game.getPlayerByID(getNumber<uint32_t>(L, 2));
 	} else if (isString(L, 2)) {
 		ReturnValue ret = g_game.getPlayerByNameWildcard(getString(L, 2), player);
-		if (ret != RET_NOERROR) {
+		if (ret != RETURNVALUE_NOERROR) {
 			lua_pushnil(L);
 			lua_pushnumber(L, ret);
 			return 2;
@@ -8726,7 +8854,7 @@ int32_t LuaScriptInterface::luaPlayerAddItem(lua_State* L)
 		}
 
 		ReturnValue ret = g_game.internalPlayerAddItem(player, item, canDropOnMap, slot);
-		if (ret != RET_NOERROR) {
+		if (ret != RETURNVALUE_NOERROR) {
 			delete item;
 			if (!hasTable) {
 				lua_pushnil(L);
@@ -8749,7 +8877,8 @@ int32_t LuaScriptInterface::luaPlayerAddItem(lua_State* L)
 
 int32_t LuaScriptInterface::luaPlayerAddItemEx(lua_State* L)
 {
-	// player:addItemEx(item[, canDropOnMap = false[, slot = CONST_SLOT_WHEREEVER]])
+	// player:addItemEx(item[, canDropOnMap = false[, index = INDEX_WHEREEVER[, flags = 0]]])
+	// player:addItemEx(item[, canDropOnMap = true[, slot = CONST_SLOT_WHEREEVER]])
 	Item* item = getUserdata<Item>(L, 2);
 	if (!item) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_ITEM_NOT_FOUND));
@@ -8770,12 +8899,20 @@ int32_t LuaScriptInterface::luaPlayerAddItemEx(lua_State* L)
 	}
 
 	bool canDropOnMap = getBoolean(L, 3, false);
+	ReturnValue returnValue;
 	if (canDropOnMap) {
 		slots_t slot = getNumber<slots_t>(L, 4, CONST_SLOT_WHEREEVER);
-		lua_pushnumber(L, g_game.internalPlayerAddItem(player, item, true, slot));
+		returnValue = g_game.internalPlayerAddItem(player, item, true, slot);
 	} else {
-		lua_pushnumber(L, g_game.internalAddItem(player, item));
+		int32_t index = getNumber<int32_t>(L, 4, INDEX_WHEREEVER);
+		uint32_t flags = getNumber<uint32_t>(L, 5, 0);
+		returnValue = g_game.internalAddItem(player, item, index, flags);
 	}
+
+	if (returnValue == RETURNVALUE_NOERROR) {
+		getScriptEnv()->removeTempItem(item);
+	}
+	lua_pushnumber(L, returnValue);
 	return 1;
 }
 
@@ -11250,7 +11387,7 @@ int32_t LuaScriptInterface::luaCombatSetCondition(lua_State* L)
 
 int32_t LuaScriptInterface::luaCombatSetCallback(lua_State* L)
 {
-	// combat:setCallBack(key, function)
+	// combat:setCallback(key, function)
 	Combat* combat = getUserdata<Combat>(L, 1);
 	if (!combat) {
 		lua_pushnil(L);
@@ -11363,13 +11500,24 @@ int32_t LuaScriptInterface::luaConditionCreate(lua_State* L)
 	ConditionType_t conditionType = getNumber<ConditionType_t>(L, 2);
 	ConditionId_t conditionId = getNumber<ConditionId_t>(L, 3, CONDITIONID_COMBAT);
 	uint32_t id;
-	if (g_luaEnvironment.createConditionObject(getScriptEnv()->getScriptInterface(), conditionType, conditionId, id)) {
+	if (g_luaEnvironment.createConditionObject(conditionType, conditionId, id)) {
 		pushUserdata<Condition>(L, g_luaEnvironment.getConditionObject(id));
 		setMetatable(L, -1, "Condition");
 	} else {
 		lua_pushnil(L);
 	}
 	return 1;
+}
+
+int32_t LuaScriptInterface::luaConditionDelete(lua_State* L)
+{
+	// condition:delete()
+	Condition** conditionPtr = getRawUserdata<Condition>(L, 1);
+	if (conditionPtr && *conditionPtr) {
+		delete *conditionPtr;
+		*conditionPtr = nullptr;
+	}
+	return 0;
 }
 
 int32_t LuaScriptInterface::luaConditionGetId(lua_State* L)
@@ -11509,25 +11657,10 @@ int32_t LuaScriptInterface::luaConditionSetFormula(lua_State* L)
 	return 1;
 }
 
-int32_t LuaScriptInterface::luaConditionAddDamage(lua_State* L)
+int32_t LuaScriptInterface::luaConditionSetOutfit(lua_State* L)
 {
-	// condition:addDamage(rounds, time, value)
-	int32_t value = getNumber<int32_t>(L, 4);
-	int32_t time = getNumber<int32_t>(L, 3);
-	int32_t rounds = getNumber<int32_t>(L, 2);
-	ConditionDamage* condition = dynamic_cast<ConditionDamage*>(getUserdata<Condition>(L, 1));
-	if (condition) {
-		pushBoolean(L, condition->addDamage(rounds, time, value));
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int32_t LuaScriptInterface::luaConditionAddOutfit(lua_State* L)
-{
-	// condition:addOutfit(outfit)
-	// condition:addOutfit(lookTypeEx, lookType, lookHead, lookBody, lookLegs, lookFeet[, lookAddons[, lookMount]])
+	// condition:setOutfit(outfit)
+	// condition:setOutfit(lookTypeEx, lookType, lookHead, lookBody, lookLegs, lookFeet[, lookAddons[, lookMount]])
 	Outfit_t outfit;
 	if (isTable(L, 2)) {
 		outfit = getOutfit(L, 2);
@@ -11541,10 +11674,26 @@ int32_t LuaScriptInterface::luaConditionAddOutfit(lua_State* L)
 		outfit.lookType = getNumber<uint16_t>(L, 3);
 		outfit.lookTypeEx = getNumber<uint16_t>(L, 2);
 	}
+
 	ConditionOutfit* condition = dynamic_cast<ConditionOutfit*>(getUserdata<Condition>(L, 1));
 	if (condition) {
-		condition->addOutfit(outfit);
+		condition->setOutfit(outfit);
 		pushBoolean(L, true);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int32_t LuaScriptInterface::luaConditionAddDamage(lua_State* L)
+{
+	// condition:addDamage(rounds, time, value)
+	int32_t value = getNumber<int32_t>(L, 4);
+	int32_t time = getNumber<int32_t>(L, 3);
+	int32_t rounds = getNumber<int32_t>(L, 2);
+	ConditionDamage* condition = dynamic_cast<ConditionDamage*>(getUserdata<Condition>(L, 1));
+	if (condition) {
+		pushBoolean(L, condition->addDamage(rounds, time, value));
 	} else {
 		lua_pushnil(L);
 	}
@@ -12384,10 +12533,6 @@ bool LuaEnvironment::closeState()
 		clearCombatObjects(combatEntry.first);
 	}
 
-	for (const auto& conditionEntry : m_conditionIdMap) {
-		clearConditionObjects(conditionEntry.first);
-	}
-
 	for (const auto& areaEntry : m_areaIdMap) {
 		clearAreaObjects(areaEntry.first);
 	}
@@ -12401,7 +12546,6 @@ bool LuaEnvironment::closeState()
 	}
 
 	m_combatIdMap.clear();
-	m_conditionIdMap.clear();
 	m_areaIdMap.clear();
 	m_timerEvents.clear();
 	m_cacheFiles.clear();
@@ -12462,33 +12606,16 @@ Condition* LuaEnvironment::getConditionObject(uint32_t id) const
 	return it->second;
 }
 
-bool LuaEnvironment::createConditionObject(LuaScriptInterface* interface, ConditionType_t conditionType, ConditionId_t conditionId, uint32_t& id)
+bool LuaEnvironment::createConditionObject(ConditionType_t conditionType, ConditionId_t conditionId, uint32_t& id)
 {
 	Condition* condition = Condition::createCondition(conditionId, conditionType, 0, 0);
 	if (!condition) {
 		return false;
 	}
+
 	id = ++m_lastConditionId;
 	m_conditionMap[m_lastConditionId] = condition;
-	m_conditionIdMap[interface].push_back(m_lastConditionId);
 	return true;
-}
-
-void LuaEnvironment::clearConditionObjects(LuaScriptInterface* interface)
-{
-	auto it = m_conditionIdMap.find(interface);
-	if (it == m_conditionIdMap.end()) {
-		return;
-	}
-
-	for (uint32_t id : it->second) {
-		auto itt = m_conditionMap.find(id);
-		if (itt != m_conditionMap.end()) {
-			delete itt->second;
-			m_conditionMap.erase(itt);
-		}
-	}
-	it->second.clear();
 }
 
 AreaCombat* LuaEnvironment::getAreaObject(uint32_t id) const

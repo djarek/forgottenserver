@@ -110,11 +110,11 @@ class Condition
 		bool isPersistent() const;
 
 	protected:
-		ConditionId_t id;
+		int64_t endTime;
 		uint32_t subId;
 		int32_t ticks;
-		int64_t endTime;
 		ConditionType_t conditionType;
+		ConditionId_t id;
 		bool isBuff;
 
 		virtual bool updateCondition(const Condition* addCondition);
@@ -354,16 +354,16 @@ class ConditionOutfit: public Condition
 			return new ConditionOutfit(*this);
 		}
 
-		void addOutfit(const Outfit_t& outfit);
+		void setOutfit(const Outfit_t& outfit);
 
 		//serialization
 		virtual bool serialize(PropWriteStream& propWriteStream);
 		virtual bool unserializeProp(ConditionAttr_t attr, PropStream& propStream);
 
 	protected:
-		std::vector<Outfit_t> outfits;
+		Outfit_t outfit;
 
-		void changeOutfit(Creature* creature, int32_t index = -1);
+		void changeOutfit(Creature* creature);
 };
 
 class ConditionLight: public Condition

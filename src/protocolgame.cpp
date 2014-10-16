@@ -51,7 +51,7 @@ extern Game g_game;
 extern ConfigManager g_config;
 extern Actions actions;
 extern CreatureEvents* g_creatureEvents;
-Chat g_chat;
+extern Chat* g_chat;
 
 ProtocolGame::LiveCastsMap ProtocolGame::m_liveCasts;
 
@@ -243,7 +243,7 @@ void ProtocolGame::connect(uint32_t playerId, OperatingSystem_t operatingSystem)
 	player = _player;
 	player->useThing2();
 
-	g_chat.removeUserFromAllChannels(*player);
+	g_chat->removeUserFromAllChannels(*player);
 	player->clearModalWindows();
 	player->setOperatingSystem((OperatingSystem_t)operatingSystem);
 	player->isConnecting = false;
@@ -266,12 +266,12 @@ void ProtocolGame::logout(bool displayEffect, bool forced)
 		if (!forced) {
 			if (!player->isAccessPlayer()) {
 				if (player->getTile()->hasFlag(TILESTATE_NOLOGOUT)) {
-					player->sendCancelMessage(RET_YOUCANNOTLOGOUTHERE);
+					player->sendCancelMessage(RETURNVALUE_YOUCANNOTLOGOUTHERE);
 					return;
 				}
 
 				if (!player->getTile()->hasFlag(TILESTATE_PROTECTIONZONE) && player->hasCondition(CONDITION_INFIGHT)) {
-					player->sendCancelMessage(RET_YOUMAYNOTLOGOUTDURINGAFIGHT);
+					player->sendCancelMessage(RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT);
 					return;
 				}
 			}
@@ -1512,7 +1512,7 @@ void ProtocolGame::sendChannelsDialog()
 	NetworkMessage msg;
 	msg.AddByte(0xAB);
 
-	const ChannelList& list = g_chat.getChannelList(*player);
+	const ChannelList& list = g_chat->getChannelList(*player);
 	msg.AddByte(list.size());
 	for (ChatChannel* channel : list) {
 		msg.add<uint16_t>(channel->getId());
@@ -2062,7 +2062,7 @@ void ProtocolGame::sendMarketDetail(uint16_t itemId)
 		std::ostringstream ss;
 		bool separator = false;
 
-		for (uint16_t i = SKILL_FIRST; i <= SKILL_LAST; i++) {
+		for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; i++) {
 			if (!it.abilities->skills[i]) {
 				continue;
 			}

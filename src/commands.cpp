@@ -58,7 +58,7 @@ extern Game g_game;
 extern CreatureEvents* g_creatureEvents;
 extern GlobalEvents* g_globalEvents;
 extern Events* g_events;
-extern Chat g_chat;
+extern Chat* g_chat;
 extern LuaEnvironment g_luaEnvironment;
 
 s_defcommands Commands::defined_commands[] = {
@@ -298,7 +298,7 @@ void Commands::reloadInfo(Player& player, const std::string& param)
 		g_events->load();
 		player.sendTextMessage(MESSAGE_STATUS_CONSOLE_BLUE, "Reloaded events.");
 	} else if (tmpParam == "chat" || tmpParam == "channel" || tmpParam == "chatchannels") {
-		g_chat.load();
+		g_chat->load();
 		player.sendTextMessage(MESSAGE_STATUS_CONSOLE_BLUE, "Reloaded chatchannels.");
 	} else if (tmpParam == "global") {
 		g_luaEnvironment.loadFile("data/global.lua");
@@ -306,6 +306,7 @@ void Commands::reloadInfo(Player& player, const std::string& param)
 	} else {
 		player.sendTextMessage(MESSAGE_STATUS_CONSOLE_BLUE, "Reload type not found.");
 	}
+	lua_gc(g_luaEnvironment.getLuaState(), LUA_GCCOLLECT, 0);
 }
 
 void Commands::sellHouse(Player& player, const std::string& param)

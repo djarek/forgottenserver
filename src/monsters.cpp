@@ -150,10 +150,10 @@ void MonsterType::createLoot(Container* corpse)
 				if (Container* container = item->getContainer()) {
 					if (!createLootContainer(container, *it)) {
 						delete container;
-					} else if (g_game.internalAddItem(corpse, item) != RET_NOERROR) {
+					} else if (g_game.internalAddItem(corpse, item) != RETURNVALUE_NOERROR) {
 						corpse->__internalAddThing(item);
 					}
-				} else if (g_game.internalAddItem(corpse, item) != RET_NOERROR) {
+				} else if (g_game.internalAddItem(corpse, item) != RETURNVALUE_NOERROR) {
 					corpse->__internalAddThing(item);
 				}
 			}
@@ -592,7 +592,7 @@ bool Monsters::deserializeSpell(const pugi::xml_node& node, spellBlock_t& sb, co
 				MonsterType* mType = g_monsters.getMonsterType(attr.as_string());
 				if (mType) {
 					ConditionOutfit* condition = dynamic_cast<ConditionOutfit*>(Condition::createCondition(CONDITIONID_COMBAT, CONDITION_OUTFIT, duration, 0));
-					condition->addOutfit(mType->outfit);
+					condition->setOutfit(mType->outfit);
 					combat->setParam(COMBAT_PARAM_AGGRESSIVE, 0);
 					combat->setCondition(condition);
 				}
@@ -601,7 +601,7 @@ bool Monsters::deserializeSpell(const pugi::xml_node& node, spellBlock_t& sb, co
 				outfit.lookTypeEx = pugi::cast<uint16_t>(attr.value());
 
 				ConditionOutfit* condition = dynamic_cast<ConditionOutfit*>(Condition::createCondition(CONDITIONID_COMBAT, CONDITION_OUTFIT, duration, 0));
-				condition->addOutfit(outfit);
+				condition->setOutfit(outfit);
 				combat->setParam(COMBAT_PARAM_AGGRESSIVE, 0);
 				combat->setCondition(condition);
 			}
@@ -705,7 +705,7 @@ bool Monsters::deserializeSpell(const pugi::xml_node& node, spellBlock_t& sb, co
 				if (tmpStrValue == "shooteffect") {
 					if ((attr = attributeNode.attribute("value"))) {
 						ShootType_t shoot = getShootType(attr.as_string());
-						if (shoot != CONST_ANI_UNK) {
+						if (shoot != CONST_ANI_NONE) {
 							combat->setParam(COMBAT_PARAM_DISTANCEEFFECT, shoot);
 						} else {
 							std::cout << "[Warning - Monsters::deserializeSpell] " << description << " - Unknown shootEffect: " << attr.as_string() << std::endl;
@@ -714,7 +714,7 @@ bool Monsters::deserializeSpell(const pugi::xml_node& node, spellBlock_t& sb, co
 				} else if (tmpStrValue == "areaeffect") {
 					if ((attr = attributeNode.attribute("value"))) {
 						MagicEffectClasses effect = getMagicEffect(attr.as_string());
-						if (effect != CONST_ME_UNK) {
+						if (effect != CONST_ME_NONE) {
 							combat->setParam(COMBAT_PARAM_EFFECT, effect);
 						} else {
 							std::cout << "[Warning - Monsters::deserializeSpell] " << description << " - Unknown areaEffect: " << attr.as_string() << std::endl;

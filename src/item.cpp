@@ -207,6 +207,33 @@ Item::~Item()
 	delete attributes;
 }
 
+bool Item::equals(const Item* otherItem) const
+{
+	if (!otherItem || id != otherItem->id) {
+		return false;
+	}
+
+	if (!attributes) {
+		return !otherItem->attributes;
+	}
+
+	const ItemAttributes* otherAttributes = otherItem->attributes;
+	if (!otherAttributes || attributes->attributeBits != otherAttributes->attributeBits) {
+		return false;
+	}
+
+	const auto& attributeList = attributes->attributes;
+	const auto& otherAttributeList = otherAttributes->attributes;
+	for (const auto& attribute : attributeList) {
+		for (const auto& otherAttribute : otherAttributeList) {
+			if (attribute.type == otherAttribute.type && attribute.value != otherAttribute.value) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 void Item::setDefaultSubtype()
 {
 	const ItemType& it = items[id];
@@ -728,7 +755,7 @@ std::string Item::getDescription(const ItemType& it, int32_t lookDistance,
 			}
 
 			if (it.abilities) {
-				for (uint16_t i = SKILL_FIRST; i <= SKILL_LAST; i++) {
+				for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; i++) {
 					if (!it.abilities->skills[i]) {
 						continue;
 					}
@@ -879,7 +906,7 @@ std::string Item::getDescription(const ItemType& it, int32_t lookDistance,
 		}
 
 		if (it.abilities) {
-			for (uint16_t i = SKILL_FIRST; i <= SKILL_LAST; i++) {
+			for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; i++) {
 				if (!it.abilities->skills[i]) {
 					continue;
 				}

@@ -135,7 +135,6 @@ class ScriptEnvironment
 		void getEventInfo(int32_t& scriptId, std::string& desc, LuaScriptInterface*& scriptInterface, int32_t& callbackId, bool& timerEvent) const;
 
 		static void addTempItem(ScriptEnvironment* env, Item* item);
-		static void removeTempItem(ScriptEnvironment* env, Item* item);
 		static void removeTempItem(Item* item);
 		static void addUniqueThing(Thing* thing);
 		static void removeUniqueThing(Thing* thing);
@@ -276,7 +275,9 @@ class LuaScriptInterface
 		}
 
 		// Metatables
-		static void setMetatable(lua_State* L, int32_t index, const std::string& string);
+		static void setMetatable(lua_State* L, int32_t index, const std::string& name);
+		static void setWeakMetatable(lua_State* L, int32_t index, const std::string& name);
+
 		static void setItemMetatable(lua_State* L, int32_t index, const Item* item);
 		static void setCreatureMetatable(lua_State* L, int32_t index, const Creature* creature);
 
@@ -1162,6 +1163,7 @@ class LuaScriptInterface
 
 		// Condition
 		static int32_t luaConditionCreate(lua_State* L);
+		static int32_t luaConditionDelete(lua_State* L);
 
 		static int32_t luaConditionGetId(lua_State* L);
 		static int32_t luaConditionGetSubId(lua_State* L);
@@ -1176,9 +1178,9 @@ class LuaScriptInterface
 
 		static int32_t luaConditionSetParameter(lua_State* L);
 		static int32_t luaConditionSetFormula(lua_State* L);
+		static int32_t luaConditionSetOutfit(lua_State* L);
 
 		static int32_t luaConditionAddDamage(lua_State* L);
-		static int32_t luaConditionAddOutfit(lua_State* L);
 
 		// MonsterType
 		static int32_t luaMonsterTypeCreate(lua_State* L);
@@ -1289,8 +1291,7 @@ class LuaEnvironment : public LuaScriptInterface
 		void clearCombatObjects(LuaScriptInterface* interface);
 
 		Condition* getConditionObject(uint32_t id) const;
-		bool createConditionObject(LuaScriptInterface* interface, ConditionType_t conditionType, ConditionId_t conditionId, uint32_t& id);
-		void clearConditionObjects(LuaScriptInterface* interface);
+		bool createConditionObject(ConditionType_t conditionType, ConditionId_t conditionId, uint32_t& id);
 
 		AreaCombat* getAreaObject(uint32_t id) const;
 		uint32_t createAreaObject(LuaScriptInterface* interface);
@@ -1306,7 +1307,6 @@ class LuaEnvironment : public LuaScriptInterface
 		std::unordered_map<uint32_t, AreaCombat*> m_areaMap;
 
 		std::unordered_map<LuaScriptInterface*, std::vector<uint32_t>> m_combatIdMap;
-		std::unordered_map<LuaScriptInterface*, std::vector<uint32_t>> m_conditionIdMap;
 		std::unordered_map<LuaScriptInterface*, std::vector<uint32_t>> m_areaIdMap;
 
 		LuaScriptInterface* m_testInterface;
