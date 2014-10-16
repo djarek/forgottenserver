@@ -37,7 +37,7 @@
 
 extern Game g_game;
 extern ConfigManager g_config;
-extern Chat g_chat;
+extern Chat* g_chat;
 
 ProtocolCast::ProtocolCast(Connection_ptr connection):
 	ProtocolGame(connection),
@@ -156,7 +156,7 @@ void ProtocolCast::syncKnownCreatureSets()
 
 void ProtocolCast::syncChatChannels()
 {
-	const auto channels = g_chat.getChannelList(*player);
+	auto channels = g_chat->getChannelList(*player);
 	for (const auto channel : channels) {
 		const auto& channelUsers = channel->getUsers();
 		if (channelUsers.find(player->getID()) != channelUsers.end()) {
@@ -182,8 +182,9 @@ void ProtocolCast::login(const std::string& liveCastName, const std::string& liv
 		return;
 	}
 
+	const auto& password = liveCasterProtocol->getLiveCastPassword();
 	if (liveCasterProtocol->isLiveCaster()) {
-		if (liveCasterProtocol->getLiveCastPassword() != liveCastPassword) {
+		if (!password.empty() && password != liveCastPassword) {
 			disconnectSpectator("Wrong live cast password.");
 			return;
 		}
