@@ -299,7 +299,7 @@ void ProtocolGame::logout(bool displayEffect, bool forced)
 
 bool ProtocolGame::startLiveCast(const std::string& password /*= ""*/)
 {
-	if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !getConnection()) {
+	if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !getConnection()) {
 		return false;
 	}
 
