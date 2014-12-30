@@ -32,7 +32,7 @@ class Item;
 struct Position;
 
 //for luascript callback
-class ValueCallback : public CallBack
+class ValueCallback final : public CallBack
 {
 	public:
 		ValueCallback(formulaType_t _type) {
@@ -44,20 +44,18 @@ class ValueCallback : public CallBack
 		formulaType_t type;
 };
 
-class TileCallback : public CallBack
+class TileCallback final : public CallBack
 {
 	public:
-		TileCallback() {}
 		void onTileCombat(Creature* creature, Tile* tile) const;
 
 	protected:
 		formulaType_t type;
 };
 
-class TargetCallback : public CallBack
+class TargetCallback final : public CallBack
 {
 	public:
-		TargetCallback() {}
 		void onTargetCombat(Creature* creature, Creature* target) const;
 
 	protected:
@@ -155,6 +153,9 @@ class MatrixArea
 			delete[] data_;
 		}
 
+		// non-assignable
+		MatrixArea& operator=(const MatrixArea&) = delete;
+
 		void setValue(uint32_t row, uint32_t col, bool value) const {
 			data_[row][col] = value;
 		}
@@ -200,11 +201,13 @@ class AreaCombat
 		AreaCombat() {
 			hasExtArea = false;
 		}
+		AreaCombat(const AreaCombat& rhs);
 		~AreaCombat() {
 			clear();
 		}
 
-		AreaCombat(const AreaCombat& rhs);
+		// non-assignable
+		AreaCombat& operator=(const AreaCombat&) = delete;
 
 		ReturnValue doCombat(Creature* attacker, const Position& pos, const Combat& combat) const;
 		void getList(const Position& centerPos, const Position& targetPos, std::list<Tile*>& list) const;
@@ -272,6 +275,10 @@ class Combat
 		Combat();
 		~Combat();
 
+		// non-copyable
+		Combat(const Combat&) = delete;
+		Combat& operator=(const Combat&) = delete;
+
 		static void doCombatHealth(Creature* caster, Creature* target, CombatDamage& damage, const CombatParams& params);
 		static void doCombatHealth(Creature* caster, const Position& position, const AreaCombat* area, CombatDamage& damage, const CombatParams& params);
 
@@ -291,9 +298,9 @@ class Combat
 		static bool isPlayerCombat(const Creature* target);
 		static CombatType_t ConditionToDamageType(ConditionType_t type);
 		static ConditionType_t DamageToConditionType(CombatType_t type);
-		static ReturnValue canTargetCreature(const Player* attacker, const Creature* target);
-		static ReturnValue canDoCombat(const Creature* caster, const Tile* tile, bool isAggressive);
-		static ReturnValue canDoCombat(const Creature* attacker, const Creature* target);
+		static ReturnValue canTargetCreature(Player* attacker, Creature* target);
+		static ReturnValue canDoCombat(Creature* caster, Tile* tile, bool isAggressive);
+		static ReturnValue canDoCombat(Creature* attacker, Creature* target);
 		static void postCombatEffects(Creature* caster, const Position& pos, const CombatParams& params);
 
 		static void addDistanceEffect(Creature* caster, const Position& fromPos, const Position& toPos, uint8_t effect);
@@ -352,18 +359,17 @@ class Combat
 		AreaCombat* area;
 };
 
-class MagicField : public Item
+class MagicField final : public Item
 {
 	public:
 		MagicField(uint16_t _type) : Item(_type) {
 			createTime = OTSYS_TIME();
 		}
-		~MagicField() {}
 
-		virtual MagicField* getMagicField() {
+		MagicField* getMagicField() final {
 			return this;
 		}
-		virtual const MagicField* getMagicField() const {
+		const MagicField* getMagicField() const final {
 			return this;
 		}
 
@@ -377,7 +383,7 @@ class MagicField : public Item
 		void onStepInField(Creature* creature);
 
 	private:
-		uint64_t createTime;
+		int64_t createTime;
 };
 
 #endif

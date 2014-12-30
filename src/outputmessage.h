@@ -34,8 +34,6 @@ class OutputMessage : public NetworkMessage
 		OutputMessage();
 
 	public:
-		~OutputMessage() {}
-
 		// non-copyable
 		OutputMessage(const OutputMessage&) = delete;
 		OutputMessage& operator=(const OutputMessage&) = delete;
@@ -117,7 +115,7 @@ class OutputMessage : public NetworkMessage
 			}
 
 			m_outputBufferStart -= sizeof(T);
-			*(T*)(m_MsgBuf + m_outputBufferStart) = add;
+			*reinterpret_cast<T*>(m_MsgBuf + m_outputBufferStart) = add;
 			//added header size to the message size
 			m_MsgSize += sizeof(T);
 		}
@@ -174,6 +172,10 @@ class OutputMessagePool
 	public:
 		~OutputMessagePool();
 
+		// non-copyable
+		OutputMessagePool(const OutputMessagePool&) = delete;
+		OutputMessagePool& operator=(const OutputMessagePool&) = delete;
+
 		static OutputMessagePool* getInstance() {
 			static OutputMessagePool instance;
 			return &instance;
@@ -182,7 +184,7 @@ class OutputMessagePool
 		void send(OutputMessage_ptr msg);
 		void sendAll();
 		void stop() {
-			m_isOpen = false;
+			m_open = false;
 		}
 		OutputMessage_ptr getOutputMessage(Protocol* protocol, bool autosend = true);
 		void startExecutionFrame();
@@ -216,6 +218,6 @@ class OutputMessagePool
 		OutputMessageMessageList m_toAddQueue;
 		std::recursive_mutex m_outputPoolLock;
 		int64_t m_frameTime;
-		bool m_isOpen;
+		bool m_open;
 };
 #endif

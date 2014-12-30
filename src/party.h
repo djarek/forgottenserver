@@ -32,7 +32,6 @@ class Party
 {
 	public:
 		Party(Player* leader);
-		~Party();
 
 		Player* getLeader() const {
 			return leader;
@@ -79,6 +78,8 @@ class Party
 		bool canUseSharedExperience(const Player* player) const;
 		void updateSharedExperience();
 
+		void updateVocationsList();
+
 		void addPlayerHealedMember(Player* player, uint32_t points);
 		void addPlayerDamageMonster(Player* player, uint32_t points);
 		void clearPlayerPoints(Player* player);
@@ -98,6 +99,8 @@ class Party
 		PlayerVector inviteList;
 
 		Player* leader;
+
+		float extraExpRate;
 
 		bool sharedExpActive;
 		bool sharedExpEnabled;

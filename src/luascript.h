@@ -101,6 +101,10 @@ class ScriptEnvironment
 		ScriptEnvironment();
 		~ScriptEnvironment();
 
+		// non-copyable
+		ScriptEnvironment(const ScriptEnvironment&) = delete;
+		ScriptEnvironment& operator=(const ScriptEnvironment&) = delete;
+
 		void resetEnv();
 
 		void setScriptId(int32_t scriptId, LuaScriptInterface* scriptInterface) {
@@ -176,7 +180,7 @@ class ScriptEnvironment
 		static ThingMap m_globalMap;
 
 		//item/creature map
-		int32_t m_lastUID;
+		uint32_t m_lastUID;
 		ThingMap m_localMap;
 
 		//temporary item list
@@ -214,6 +218,10 @@ class LuaScriptInterface
 	public:
 		LuaScriptInterface(const std::string& interfaceName);
 		virtual ~LuaScriptInterface();
+
+		// non-copyable
+		LuaScriptInterface(const LuaScriptInterface&) = delete;
+		LuaScriptInterface& operator=(const LuaScriptInterface&) = delete;
 
 		virtual bool initState();
 		bool reInitState();
@@ -258,7 +266,7 @@ class LuaScriptInterface
 		void callVoidFunction(int32_t params);
 
 		//push/pop common structures
-		static void pushThing(lua_State* L, Thing* thing, uint32_t uid);
+		static void pushThing(lua_State* L, Thing* thing);
 		static void pushVariant(lua_State* L, const LuaVariant& var);
 		static void pushString(lua_State* L, const std::string& value);
 		static void pushCallback(lua_State* L, int32_t callback);
@@ -315,7 +323,7 @@ class LuaScriptInterface
 		template<class T>
 		inline static T** getRawUserdata(lua_State* L, int32_t arg)
 		{
-			return static_cast<T**>(lua_touserdata(L, arg));
+			return reinterpret_cast<T**>(lua_touserdata(L, arg));
 		}
 
 		inline static bool getBoolean(lua_State* L, int32_t arg)
@@ -349,6 +357,8 @@ class LuaScriptInterface
 		}
 
 		static std::string getFieldString(lua_State* L, int32_t arg, const std::string& key);
+
+		static LuaDataType getUserdataType(lua_State* L, int32_t arg);
 
 		// Is
 		inline static bool isNumber(lua_State* L, int32_t arg)
@@ -400,7 +410,7 @@ class LuaScriptInterface
 		static const luaL_Reg luaBitReg[7];
 #endif
 		static const luaL_Reg luaConfigManagerTable[4];
-		static const luaL_Reg luaDatabaseTable[7];
+		static const luaL_Reg luaDatabaseTable[9];
 		static const luaL_Reg luaResultTable[7];
 
 		static int32_t protectedCall(lua_State* L, int32_t nargs, int32_t nresults);
@@ -524,7 +534,9 @@ class LuaScriptInterface
 		static int32_t luaConfigManagerGetBoolean(lua_State* L);
 
 		static int32_t luaDatabaseExecute(lua_State* L);
+		static int32_t luaDatabaseAsyncExecute(lua_State* L);
 		static int32_t luaDatabaseStoreQuery(lua_State* L);
+		static int32_t luaDatabaseAsyncStoreQuery(lua_State* L);
 		static int32_t luaDatabaseEscapeString(lua_State* L);
 		static int32_t luaDatabaseEscapeBlob(lua_State* L);
 		static int32_t luaDatabaseLastInsertId(lua_State* L);
@@ -543,6 +555,9 @@ class LuaScriptInterface
 
 		// _G
 		static int32_t luaIsType(lua_State* L);
+
+		// os
+		static int32_t luaSystemTime(lua_State* L);
 
 		// table
 		static int32_t luaTableCreate(lua_State* L);
@@ -689,6 +704,7 @@ class LuaScriptInterface
 
 		// Item
 		static int32_t luaItemCreate(lua_State* L);
+		static int32_t luaItemIndex(lua_State* L);
 
 		static int32_t luaItemIsCreature(lua_State* L);
 		static int32_t luaItemIsItem(lua_State* L);
@@ -712,6 +728,7 @@ class LuaScriptInterface
 		static int32_t luaItemGetCount(lua_State* L);
 		static int32_t luaItemGetCharges(lua_State* L);
 		static int32_t luaItemGetFluidType(lua_State* L);
+		static int32_t luaItemGetWeight(lua_State* L);
 
 		static int32_t luaItemGetSubType(lua_State* L);
 
@@ -722,6 +739,7 @@ class LuaScriptInterface
 		static int32_t luaItemGetPosition(lua_State* L);
 		static int32_t luaItemGetTile(lua_State* L);
 
+		static int32_t luaItemHasAttribute(lua_State* L);
 		static int32_t luaItemGetAttribute(lua_State* L);
 		static int32_t luaItemSetAttribute(lua_State* L);
 		static int32_t luaItemRemoveAttribute(lua_State* L);
@@ -761,6 +779,7 @@ class LuaScriptInterface
 
 		// Creature
 		static int32_t luaCreatureCreate(lua_State* L);
+		static int32_t luaCreatureIndex(lua_State* L);
 
 		static int32_t luaCreatureRegisterEvent(lua_State* L);
 		static int32_t luaCreatureUnregisterEvent(lua_State* L);
@@ -815,6 +834,9 @@ class LuaScriptInterface
 		static int32_t luaCreatureAddMana(lua_State* L);
 		static int32_t luaCreatureGetMaxMana(lua_State* L);
 
+		static int32_t luaCreatureGetSkull(lua_State* L);
+		static int32_t luaCreatureSetSkull(lua_State* L);
+
 		static int32_t luaCreatureGetOutfit(lua_State* L);
 		static int32_t luaCreatureSetOutfit(lua_State* L);
 
@@ -855,8 +877,6 @@ class LuaScriptInterface
 		static int32_t luaPlayerGetDepotChest(lua_State* L);
 		static int32_t luaPlayerGetInbox(lua_State* L);
 
-		static int32_t luaPlayerGetSkull(lua_State* L);
-		static int32_t luaPlayerSetSkull(lua_State* L);
 		static int32_t luaPlayerGetSkullTime(lua_State* L);
 		static int32_t luaPlayerSetSkullTime(lua_State* L);
 		static int32_t luaPlayerGetDeathPenalty(lua_State* L);
@@ -1123,16 +1143,20 @@ class LuaScriptInterface
 
 		static int32_t luaItemTypeGetType(lua_State* L);
 		static int32_t luaItemTypeGetId(lua_State* L);
+		static int32_t luaItemTypeGetClientId(lua_State* L);
 		static int32_t luaItemTypeGetName(lua_State* L);
 		static int32_t luaItemTypeGetPluralName(lua_State* L);
 		static int32_t luaItemTypeGetArticle(lua_State* L);
 		static int32_t luaItemTypeGetDescription(lua_State* L);
 		static int32_t luaItemTypeGetSlotPosition(lua_State *L);
 
+		static int32_t luaItemTypeGetCharges(lua_State* L);
 		static int32_t luaItemTypeGetFluidSource(lua_State* L);
 		static int32_t luaItemTypeGetCapacity(lua_State* L);
 		static int32_t luaItemTypeGetWeight(lua_State* L);
 
+		static int32_t luaItemTypeGetHitChance(lua_State* L);
+		static int32_t luaItemTypeGetShootRange(lua_State* L);
 		static int32_t luaItemTypeGetAttack(lua_State* L);
 		static int32_t luaItemTypeGetDefense(lua_State* L);
 		static int32_t luaItemTypeGetExtraDefense(lua_State* L);
@@ -1279,6 +1303,10 @@ class LuaEnvironment : public LuaScriptInterface
 	public:
 		LuaEnvironment();
 		~LuaEnvironment();
+
+		// non-copyable
+		LuaEnvironment(const LuaEnvironment&) = delete;
+		LuaEnvironment& operator=(const LuaEnvironment&) = delete;
 
 		bool initState();
 		bool reInitState();

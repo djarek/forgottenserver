@@ -34,7 +34,7 @@ enum MoveEvent_t {
 	MOVE_EVENT_ADD_ITEM_ITEMTILE,
 	MOVE_EVENT_REMOVE_ITEM_ITEMTILE,
 	MOVE_EVENT_LAST,
-	MOVE_EVENT_NONE,
+	MOVE_EVENT_NONE
 };
 
 class MoveEvent;
@@ -43,13 +43,17 @@ struct MoveEventList {
 	std::list<MoveEvent*> moveEvent[MOVE_EVENT_LAST];
 };
 
-typedef std::map<int32_t, bool> VocEquipMap;
+typedef std::map<uint16_t, bool> VocEquipMap;
 
-class MoveEvents : public BaseEvents
+class MoveEvents final : public BaseEvents
 {
 	public:
 		MoveEvents();
-		virtual ~MoveEvents();
+		~MoveEvents();
+
+		// non-copyable
+		MoveEvents(const MoveEvents&) = delete;
+		MoveEvents& operator=(const MoveEvents&) = delete;
 
 		uint32_t onCreatureMove(Creature* creature, const Tile* tile, bool isIn);
 		uint32_t onPlayerEquip(Player* player, Item* item, slots_t slot, bool isCheck);
@@ -63,11 +67,11 @@ class MoveEvents : public BaseEvents
 		void clearMap(MoveListMap& map);
 
 		typedef std::map<Position, MoveEventList> MovePosListMap;
-		virtual void clear();
-		virtual LuaScriptInterface& getScriptInterface();
-		virtual std::string getScriptBaseName();
-		virtual Event* getEvent(const std::string& nodeName);
-		virtual bool registerEvent(Event* event, const pugi::xml_node& node);
+		void clear() final;
+		LuaScriptInterface& getScriptInterface() final;
+		std::string getScriptBaseName() const final;
+		Event* getEvent(const std::string& nodeName) final;
+		bool registerEvent(Event* event, const pugi::xml_node& node) final;
 
 		void registerItemID(int32_t itemId, MoveEvent_t eventType);
 		void registerActionID(int32_t actionId, MoveEvent_t eventType);
@@ -92,18 +96,17 @@ typedef uint32_t (StepFunction)(Creature* creature, Item* item, const Position& 
 typedef uint32_t (MoveFunction)(Item* item, Item* tileItem, const Position& pos);
 typedef uint32_t (EquipFunction)(MoveEvent* moveEvent, Player* player, Item* item, slots_t slot, bool boolean);
 
-class MoveEvent : public Event
+class MoveEvent final : public Event
 {
 	public:
 		MoveEvent(LuaScriptInterface* _interface);
 		MoveEvent(const MoveEvent* copy);
-		virtual ~MoveEvent();
 
 		MoveEvent_t getEventType() const;
 		void setEventType(MoveEvent_t type);
 
-		virtual bool configureEvent(const pugi::xml_node& node);
-		virtual bool loadFunction(const std::string& functionName);
+		bool configureEvent(const pugi::xml_node& node) final;
+		bool loadFunction(const std::string& functionName) final;
 
 		uint32_t fireStepEvent(Creature* creature, Item* item, const Position& pos);
 		uint32_t fireAddRemItem(Item* item, Item* tileItem, const Position& pos);
@@ -140,7 +143,7 @@ class MoveEvent : public Event
 		}
 
 	protected:
-		virtual std::string getScriptEventName();
+		std::string getScriptEventName() const final;
 
 		static StepFunction StepInField;
 		static StepFunction StepOutField;

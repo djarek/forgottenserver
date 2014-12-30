@@ -30,7 +30,7 @@
 
 int32_t NetworkMessage::decodeHeader()
 {
-	int32_t size = (int32_t)(m_RealBuf[0] | m_RealBuf[1] << 8);
+	int32_t size = static_cast<int32_t>(m_RealBuf[0] | m_RealBuf[1] << 8);
 	m_MsgSize = size;
 	return size;
 }
@@ -46,7 +46,7 @@ std::string NetworkMessage::GetString(uint16_t stringlen/* = 0*/)
 		return std::string();
 	}
 
-	char* v = (char*)m_RealBuf + m_ReadPos;
+	char* v = reinterpret_cast<char*>(m_RealBuf) + m_ReadPos;
 	m_ReadPos += stringlen;
 	return std::string(v, stringlen);
 }

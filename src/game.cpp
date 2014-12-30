@@ -50,6 +50,7 @@
 #include "spawn.h"
 #include "connection.h"
 #include "events.h"
+#include "databasetasks.h"
 
 extern ConfigManager g_config;
 extern Actions* g_actions;
@@ -174,6 +175,7 @@ void Game::setGameState(GameState_t newState)
 				createTask(std::bind(&Game::shutdown, this)));
 
 			g_scheduler.stop();
+			g_databaseTasks.stop();
 			g_dispatcher.stop();
 			break;
 		}
@@ -231,7 +233,7 @@ void Game::loadMap(const std::string& path)
 	map.loadMap(path, false);
 }
 
-Cylinder* Game::internalGetCylinder(Player* player, const Position& pos)
+Cylinder* Game::internalGetCylinder(Player* player, const Position& pos) const
 {
 	if (pos.x != 0xFFFF) {
 		return getTile(pos.x, pos.y, pos.z);
@@ -247,7 +249,7 @@ Cylinder* Game::internalGetCylinder(Player* player, const Position& pos)
 	return player;
 }
 
-Thing* Game::internalGetThing(Player* player, const Position& pos, int32_t index, uint32_t spriteId /*= 0*/, stackPosType_t type /*= STACKPOS_NORMAL*/)
+Thing* Game::internalGetThing(Player* player, const Position& pos, int32_t index, uint32_t spriteId /*= 0*/, stackPosType_t type /*= STACKPOS_NORMAL*/) const
 {
 	if (pos.x != 0xFFFF) {
 		Tile* tile = getTile(pos.x, pos.y, pos.z);
@@ -337,7 +339,7 @@ Thing* Game::internalGetThing(Player* player, const Position& pos, int32_t index
 			}
 
 			int32_t subType;
-			if (it.isFluidContainer() && index < int32_t(sizeof(reverseFluidMap) / sizeof(int8_t))) {
+			if (it.isFluidContainer() && index < static_cast<int32_t>(sizeof(reverseFluidMap) / sizeof(uint8_t))) {
 				subType = reverseFluidMap[index];
 			} else {
 				subType = -1;
@@ -366,7 +368,7 @@ void Game::internalGetPosition(Item* item, Position& pos, uint8_t& stackpos)
 
 			Container* container = dynamic_cast<Container*>(item->getParent());
 			if (container) {
-				pos.y = (uint16_t)0x40 | (uint16_t)player->getContainerID(container);
+				pos.y = static_cast<uint16_t>(0x40) | static_cast<uint16_t>(player->getContainerID(container));
 				pos.z = container->__getIndexOfThing(item);
 				stackpos = pos.z;
 			} else {
@@ -383,21 +385,6 @@ void Game::internalGetPosition(Item* item, Position& pos, uint8_t& stackpos)
 void Game::setTile(Tile* newTile)
 {
 	return map.setTile(newTile->getPosition(), newTile);
-}
-
-Tile* Game::getTile(int32_t x, int32_t y, int32_t z)
-{
-	return map.getTile(x, y, z);
-}
-
-Tile* Game::getTile(const Position& pos)
-{
-	return map.getTile(pos.x, pos.y, pos.z);
-}
-
-QTreeLeafNode* Game::getLeaf(uint32_t x, uint32_t y)
-{
-	return map.getLeaf(x, y);
 }
 
 Creature* Game::getCreatureByID(uint32_t id)
@@ -727,17 +714,17 @@ bool Game::placeCreature(Creature* creature, const Position& pos, bool extendedP
 					bool sendUpdateSkills = false;
 					if (offlineTrainingSkill == SKILL_CLUB || offlineTrainingSkill == SKILL_SWORD || offlineTrainingSkill == SKILL_AXE) {
 						float modifier = vocation->getAttackSpeed() / 1000.f;
-						sendUpdateSkills = player->addOfflineTrainingTries((skills_t)offlineTrainingSkill, (offlineTrainingTime / modifier) / 2);
+						sendUpdateSkills = player->addOfflineTrainingTries(static_cast<skills_t>(offlineTrainingSkill), (offlineTrainingTime / modifier) / 2);
 					} else if (offlineTrainingSkill == SKILL_DISTANCE) {
 						float modifier = vocation->getAttackSpeed() / 1000.f;
-						sendUpdateSkills = player->addOfflineTrainingTries((skills_t)offlineTrainingSkill, (offlineTrainingTime / modifier) / 4);
+						sendUpdateSkills = player->addOfflineTrainingTries(static_cast<skills_t>(offlineTrainingSkill), (offlineTrainingTime / modifier) / 4);
 					} else if (offlineTrainingSkill == SKILL_MAGLEVEL) {
 						int32_t gainTicks = vocation->getManaGainTicks() * 2;
 						if (gainTicks == 0) {
 							gainTicks = 1;
 						}
 
-						player->addOfflineTrainingTries(SKILL_MAGLEVEL, offlineTrainingTime * (vocation->getManaGainAmount() / gainTicks));
+						player->addOfflineTrainingTries(SKILL_MAGLEVEL, offlineTrainingTime * (static_cast<double>(vocation->getManaGainAmount()) / gainTicks));
 					}
 
 					if (player->addOfflineTrainingTries(SKILL_SHIELD, offlineTrainingTime / 4) || sendUpdateSkills) {
@@ -1552,7 +1539,7 @@ ReturnValue Game::internalRemoveItem(Item* item, int32_t count /*= -1*/, bool te
 ReturnValue Game::internalPlayerAddItem(Player* player, Item* item, bool dropOnMap /*= true*/, slots_t slot /*= CONST_SLOT_WHEREEVER*/)
 {
 	uint32_t remainderCount = 0;
-	ReturnValue ret = internalAddItem(player, item, (int32_t)slot, 0, false, remainderCount);
+	ReturnValue ret = internalAddItem(player, item, static_cast<int32_t>(slot), 0, false, remainderCount);
 	if (remainderCount > 0) {
 		Item* remainderItem = Item::CreateItem(item->getID(), remainderCount);
 		ReturnValue remaindRet = internalAddItem(player->getTile(), remainderItem, INDEX_WHEREEVER, FLAG_NOLIMIT);
@@ -1569,7 +1556,7 @@ ReturnValue Game::internalPlayerAddItem(Player* player, Item* item, bool dropOnM
 }
 
 Item* Game::findItemOfType(Cylinder* cylinder, uint16_t itemId,
-                           bool depthSearch /*= true*/, int32_t subType /*= -1*/)
+                           bool depthSearch /*= true*/, int32_t subType /*= -1*/) const
 {
 	if (cylinder == nullptr) {
 		return nullptr;
@@ -1754,8 +1741,12 @@ Item* Game::transformItem(Item* item, uint16_t newId, int32_t newCount /*= -1*/)
 		return item;
 	}
 
-	const ItemType& curType = Item::items[item->getID()];
 	const ItemType& newType = Item::items[newId];
+	if (newType.id == 0) {
+		return item;
+	}
+
+	const ItemType& curType = Item::items[item->getID()];
 	if (curType.alwaysOnTop != newType.alwaysOnTop) {
 		//This only occurs when you transform items on tiles from a downItem to a topItem (or vice versa)
 		//Remove the old, and add the new
@@ -1775,7 +1766,7 @@ Item* Game::transformItem(Item* item, uint16_t newId, int32_t newCount /*= -1*/)
 			return nullptr;
 		}
 
-		newItem->stealAttributes(item);
+		newItem->moveAttributes(item);
 
 		ret = internalAddItem(cylinder, newItem, INDEX_WHEREEVER, FLAG_NOLIMIT);
 		if (ret != RETURNVALUE_NOERROR) {
@@ -3763,6 +3754,10 @@ void Game::changeSpeed(Creature* creature, int32_t varSpeedDelta)
 
 void Game::internalCreatureChangeOutfit(Creature* creature, const Outfit_t& outfit)
 {
+	if (!g_events->eventCreatureOnChangeOutfit(creature, outfit)) {
+		return;
+	}
+
 	creature->setCurrentOutfit(outfit);
 
 	if (creature->isInvisible()) {
@@ -3797,80 +3792,77 @@ void Game::changeLight(const Creature* creature)
 	}
 }
 
-bool Game::combatBlockHit(CombatType_t combatType, Creature* attacker, Creature* target,
-                          int32_t& healthChange, bool checkDefense, bool checkArmor, bool field)
+bool Game::combatBlockHit(CombatDamage& damage, Creature* attacker, Creature* target, bool checkDefense, bool checkArmor, bool field)
 {
-	if (combatType == COMBAT_NONE) {
+	if (damage.primary.type == COMBAT_NONE && damage.secondary.type == COMBAT_NONE) {
 		return true;
 	}
 
-	if (target->getPlayer() && target->getPlayer()->isInGhostMode()) {
+	if (target->getPlayer() && target->isInGhostMode()) {
 		return true;
 	}
 
-	if (healthChange > 0) {
+	if (damage.primary.value > 0) {
 		return false;
 	}
 
-	const Position& targetPos = target->getPosition();
-
-	SpectatorVec list;
-	getSpectators(list, targetPos, false, true);
-
-	if (!target->isAttackable() || Combat::canDoCombat(attacker, target) != RETURNVALUE_NOERROR) {
-		if (!target->isInGhostMode()) {
-			addMagicEffect(list, targetPos, CONST_ME_POFF);
+	static const auto sendBlockEffect = [this](BlockType_t blockType, CombatType_t combatType, const Position& targetPos) {
+		if (blockType == BLOCK_DEFENSE) {
+			addMagicEffect(targetPos, CONST_ME_POFF);
+		} else if (blockType == BLOCK_ARMOR) {
+			addMagicEffect(targetPos, CONST_ME_BLOCKHIT);
+		} else if (blockType == BLOCK_IMMUNITY) {
+			uint8_t hitEffect = 0;
+			switch (combatType) {
+				case COMBAT_UNDEFINEDDAMAGE: {
+					return;
+				}
+				case COMBAT_ENERGYDAMAGE:
+				case COMBAT_FIREDAMAGE:
+				case COMBAT_PHYSICALDAMAGE:
+				case COMBAT_ICEDAMAGE:
+				case COMBAT_DEATHDAMAGE: {
+					hitEffect = CONST_ME_BLOCKHIT;
+					break;
+				}
+				case COMBAT_EARTHDAMAGE: {
+					hitEffect = CONST_ME_GREEN_RINGS;
+					break;
+				}
+				case COMBAT_HOLYDAMAGE: {
+					hitEffect = CONST_ME_HOLYDAMAGE;
+					break;
+				}
+				default: {
+					hitEffect = CONST_ME_POFF;
+					break;
+				}
+			}
+			addMagicEffect(targetPos, hitEffect);
 		}
-		return true;
+	};
+
+	BlockType_t primaryBlockType, secondaryBlockType;
+	if (damage.primary.type != COMBAT_NONE) {
+		damage.primary.value = -damage.primary.value;
+		primaryBlockType = target->blockHit(attacker, damage.primary.type, damage.primary.value, checkDefense, checkArmor, field);
+
+		damage.primary.value = -damage.primary.value;
+		sendBlockEffect(primaryBlockType, damage.primary.type, target->getPosition());
+	} else {
+		primaryBlockType = BLOCK_NONE;
 	}
 
-	int32_t damage = -healthChange;
-	BlockType_t blockType = target->blockHit(attacker, combatType, damage, checkDefense, checkArmor, field);
-	healthChange = -damage;
+	if (damage.secondary.type != COMBAT_NONE) {
+		damage.secondary.value = -damage.secondary.value;
+		secondaryBlockType = target->blockHit(attacker, damage.secondary.type, damage.secondary.value, false, false, field);
 
-	if (blockType == BLOCK_DEFENSE) {
-		addMagicEffect(list, targetPos, CONST_ME_POFF);
-		return true;
-	} else if (blockType == BLOCK_ARMOR) {
-		addMagicEffect(list, targetPos, CONST_ME_BLOCKHIT);
-		return true;
-	} else if (blockType == BLOCK_IMMUNITY) {
-		uint8_t hitEffect = 0;
-
-		switch (combatType) {
-			case COMBAT_UNDEFINEDDAMAGE:
-				break;
-
-			case COMBAT_ENERGYDAMAGE:
-			case COMBAT_FIREDAMAGE:
-			case COMBAT_PHYSICALDAMAGE:
-			case COMBAT_ICEDAMAGE:
-			case COMBAT_DEATHDAMAGE: {
-				hitEffect = CONST_ME_BLOCKHIT;
-				break;
-			}
-
-			case COMBAT_EARTHDAMAGE: {
-				hitEffect = CONST_ME_GREEN_RINGS;
-				break;
-			}
-
-			case COMBAT_HOLYDAMAGE: {
-				hitEffect = CONST_ME_HOLYDAMAGE;
-				break;
-			}
-
-			default: {
-				hitEffect = CONST_ME_POFF;
-				break;
-			}
-		}
-
-		addMagicEffect(list, targetPos, hitEffect);
-		return true;
+		damage.secondary.value = -damage.secondary.value;
+		sendBlockEffect(secondaryBlockType, damage.secondary.type, target->getPosition());
+	} else {
+		secondaryBlockType = BLOCK_NONE;
 	}
-
-	return false;
+	return (primaryBlockType != BLOCK_NONE) && (secondaryBlockType != BLOCK_NONE);
 }
 
 void Game::combatGetTypeInfo(CombatType_t combatType, Creature* target, TextColor_t& color, uint8_t& effect)
@@ -4054,11 +4046,10 @@ bool Game::combatChangeHealth(Creature* attacker, Creature* target, CombatDamage
 			}
 		}
 	} else {
-		SpectatorVec list;
-		getSpectators(list, targetPos, true, true);
-
-		if (!target->isAttackable() || Combat::canDoCombat(attacker, target) != RETURNVALUE_NOERROR) {
-			addMagicEffect(list, targetPos, CONST_ME_POFF);
+		if (!target->isAttackable()) {
+			if (!target->isInGhostMode()) {
+				addMagicEffect(targetPos, CONST_ME_POFF);
+			}
 			return true;
 		}
 
@@ -4091,6 +4082,7 @@ bool Game::combatChangeHealth(Creature* attacker, Creature* target, CombatDamage
 		TextMessage message;
 		message.position = targetPos;
 
+		SpectatorVec list;
 		if (target->hasCondition(CONDITION_MANASHIELD) && damage.primary.type != COMBAT_UNDEFINEDDAMAGE) {
 			int32_t manaDamage = std::min<int32_t>(target->getMana(), healthChange);
 			if (manaDamage != 0) {
@@ -4108,6 +4100,7 @@ bool Game::combatChangeHealth(Creature* attacker, Creature* target, CombatDamage
 				}
 
 				target->drainMana(attacker, manaDamage);
+				getSpectators(list, targetPos, true, true);
 				addMagicEffect(list, targetPos, CONST_ME_LOSEENERGY);
 
 				std::string damageString = std::to_string(manaDamage);
@@ -4192,6 +4185,9 @@ bool Game::combatChangeHealth(Creature* attacker, Creature* target, CombatDamage
 		}
 
 		target->drainHealth(attacker, realDamage);
+		if (list.empty()) {
+			getSpectators(list, targetPos, true, true);
+		}
 		addCreatureHealth(list, target);
 
 		message.primary.value = damage.primary.value;
@@ -4286,8 +4282,10 @@ bool Game::combatChangeMana(Creature* attacker, Creature* target, int32_t manaCh
 		target->changeMana(manaChange);
 	} else {
 		const Position& targetPos = target->getPosition();
-		if (!target->isAttackable() || Combat::canDoCombat(attacker, target) != RETURNVALUE_NOERROR) {
-			addMagicEffect(targetPos, CONST_ME_POFF);
+		if (!target->isAttackable()) {
+			if (!target->isInGhostMode()) {
+				addMagicEffect(targetPos, CONST_ME_POFF);
+			}
 			return false;
 		}
 
@@ -4448,14 +4446,13 @@ void Game::startDecay(Item* item)
 void Game::internalDecayItem(Item* item)
 {
 	const ItemType& it = Item::items[item->getID()];
-
 	if (it.decayTo != 0) {
 		Item* newItem = transformItem(item, it.decayTo);
 		startDecay(newItem);
 	} else {
 		ReturnValue ret = internalRemoveItem(item);
 		if (ret != RETURNVALUE_NOERROR) {
-			std::cout << "DEBUG, internalDecayItem failed, error code: " << (int32_t) ret << "item id: " << item->getID() << std::endl;
+			std::cout << "[Debug - Game::internalDecayItem] internalDecayItem failed, error code: " << static_cast<uint32_t>(ret) << ", item id: " << item->getID() << std::endl;
 		}
 	}
 }
@@ -4586,6 +4583,7 @@ void Game::shutdown()
 	std::cout << "Shutting down server..." << std::flush;
 
 	g_scheduler.shutdown();
+	g_databaseTasks.shutdown();
 	g_dispatcher.shutdown();
 	Spawns::getInstance()->clear();
 	Raids::getInstance()->clear();
@@ -4654,16 +4652,16 @@ void Game::updateCreatureWalkthrough(const Creature* creature)
 	}
 }
 
-void Game::updatePlayerSkull(Player* player)
+void Game::updateCreatureSkull(const Creature* creature)
 {
 	if (getWorldType() != WORLD_TYPE_PVP) {
 		return;
 	}
 
 	SpectatorVec list;
-	getSpectators(list, player->getPosition(), true, true);
+	getSpectators(list, creature->getPosition(), true, true);
 	for (Creature* spectator : list) {
-		spectator->getPlayer()->sendCreatureSkull(player);
+		spectator->getPlayer()->sendCreatureSkull(creature);
 	}
 }
 
@@ -5237,13 +5235,13 @@ void Game::playerCreateMarketOffer(uint32_t playerId, uint8_t type, uint16_t spr
 					ItemAttributes* attributes = item->getAttributes();
 					for (const auto& attr : attributes->getList()) {
 						if (attr.type == ITEM_ATTRIBUTE_CHARGES) {
-							uint16_t charges = static_cast<uint16_t>(0xFFFF & reinterpret_cast<ptrdiff_t>(attr.value));
+							uint16_t charges = static_cast<uint16_t>(reinterpret_cast<ptrdiff_t>(attr.value));
 							if (charges != itemType.charges) {
 								badAttribute = true;
 								break;
 							}
 						} else if (attr.type == ITEM_ATTRIBUTE_DURATION) {
-							uint32_t duration = static_cast<uint32_t>(0xFFFFFFFF & reinterpret_cast<ptrdiff_t>(attr.value));
+							uint32_t duration = static_cast<uint32_t>(reinterpret_cast<ptrdiff_t>(attr.value));
 							if (duration != itemType.decayTime) {
 								badAttribute = true;
 								break;
@@ -5296,7 +5294,7 @@ void Game::playerCreateMarketOffer(uint32_t playerId, uint8_t type, uint16_t spr
 
 		player->bankBalance -= fee;
 	} else {
-		uint64_t totalPrice = (uint64_t)price * amount;
+		uint64_t totalPrice = static_cast<uint64_t>(price) * amount;
 		totalPrice += fee;
 		if (totalPrice > player->bankBalance) {
 			return;
@@ -5305,7 +5303,7 @@ void Game::playerCreateMarketOffer(uint32_t playerId, uint8_t type, uint16_t spr
 		player->bankBalance -= totalPrice;
 	}
 
-	IOMarket::createOffer(player->getGUID(), (MarketAction_t)type, it.id, amount, price, anonymous);
+	IOMarket::createOffer(player->getGUID(), static_cast<MarketAction_t>(type), it.id, amount, price, anonymous);
 
 	player->sendMarketEnter(player->getLastDepotId());
 	const MarketOfferList& buyOffers = IOMarket::getActiveOffers(MARKETACTION_BUY, it.id);
@@ -5330,7 +5328,7 @@ void Game::playerCancelMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 	}
 
 	if (offer.type == MARKETACTION_BUY) {
-		player->bankBalance += (uint64_t)offer.price * offer.amount;
+		player->bankBalance += static_cast<uint64_t>(offer.price) * offer.amount;
 		player->sendMarketEnter(player->getLastDepotId());
 	} else {
 		const ItemType& it = Item::items[offer.itemId];
@@ -5403,7 +5401,7 @@ void Game::playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 		return;
 	}
 
-	uint64_t totalPrice = (uint64_t)offer.price * amount;
+	uint64_t totalPrice = static_cast<uint64_t>(offer.price) * amount;
 
 	if (offer.type == MARKETACTION_BUY) {
 		DepotChest* depotChest = player->getDepotChest(player->getLastDepotId(), false);
@@ -5437,13 +5435,13 @@ void Game::playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 					ItemAttributes* attributes = item->getAttributes();
 					for (const auto& attr : attributes->getList()) {
 						if (attr.type == ITEM_ATTRIBUTE_CHARGES) {
-							uint16_t charges = static_cast<uint16_t>(0xFFFF & reinterpret_cast<ptrdiff_t>(attr.value));
+							uint16_t charges = static_cast<uint16_t>(reinterpret_cast<ptrdiff_t>(attr.value));
 							if (charges != itemType.charges) {
 								badAttribute = true;
 								break;
 							}
 						} else if (attr.type == ITEM_ATTRIBUTE_DURATION) {
-							uint32_t duration = static_cast<uint32_t>(0xFFFFFFFF & reinterpret_cast<ptrdiff_t>(attr.value));
+							uint32_t duration = static_cast<uint32_t>(reinterpret_cast<ptrdiff_t>(attr.value));
 							if (duration != itemType.decayTime) {
 								badAttribute = true;
 								break;
@@ -5603,83 +5601,6 @@ void Game::playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 	player->sendMarketEnter(player->getLastDepotId());
 	offer.timestamp += marketOfferDuration;
 	player->sendMarketAcceptOffer(offer);
-}
-
-void Game::checkExpiredMarketOffers()
-{
-	const ExpiredMarketOfferList& expiredBuyOffers = IOMarket::getExpiredOffers(MARKETACTION_BUY);
-	for (const ExpiredMarketOffer& offer : expiredBuyOffers) {
-		uint64_t totalPrice = (uint64_t)offer.price * offer.amount;
-
-		Player* player = getPlayerByGUID(offer.playerId);
-		if (player) {
-			player->bankBalance += totalPrice;
-		} else {
-			IOLoginData::increaseBankBalance(offer.playerId, totalPrice);
-		}
-
-		IOMarket::moveOfferToHistory(offer.id, OFFERSTATE_EXPIRED);
-	}
-
-	const ExpiredMarketOfferList& expiredSellOffers = IOMarket::getExpiredOffers(MARKETACTION_SELL);
-	for (const ExpiredMarketOffer& offer : expiredSellOffers) {
-		Player* player = getPlayerByGUID(offer.playerId);
-		if (!player) {
-			player = new Player(nullptr);
-			if (!IOLoginData::loadPlayerById(player, offer.playerId)) {
-				delete player;
-				continue;
-			}
-		}
-
-		const ItemType& itemType = Item::items[offer.itemId];
-		if (itemType.id == 0) {
-			continue;
-		}
-
-		if (itemType.stackable) {
-			uint16_t tmpAmount = offer.amount;
-			while (tmpAmount > 0) {
-				uint16_t stackCount = std::min<uint16_t>(100, tmpAmount);
-				Item* item = Item::CreateItem(itemType.id, stackCount);
-				if (internalAddItem(player->getInbox(), item, INDEX_WHEREEVER, FLAG_NOLIMIT) != RETURNVALUE_NOERROR) {
-					delete item;
-					break;
-				}
-
-				tmpAmount -= stackCount;
-			}
-		} else {
-			int32_t subType;
-			if (itemType.charges != 0) {
-				subType = itemType.charges;
-			} else {
-				subType = -1;
-			}
-
-			for (uint16_t i = 0; i < offer.amount; ++i) {
-				Item* item = Item::CreateItem(itemType.id, subType);
-				if (internalAddItem(player->getInbox(), item, INDEX_WHEREEVER, FLAG_NOLIMIT) != RETURNVALUE_NOERROR) {
-					delete item;
-					break;
-				}
-			}
-		}
-
-		if (player->isOffline()) {
-			IOLoginData::savePlayer(player);
-			delete player;
-		}
-
-		IOMarket::moveOfferToHistory(offer.id, OFFERSTATE_EXPIRED);
-	}
-
-	int32_t checkExpiredMarketOffersEachMinutes = g_config.getNumber(ConfigManager::CHECK_EXPIRED_MARKET_OFFERS_EACH_MINUTES);
-	if (checkExpiredMarketOffersEachMinutes <= 0) {
-		return;
-	}
-
-	g_scheduler.addEvent(createSchedulerTask(checkExpiredMarketOffersEachMinutes * 60 * 1000, std::bind(&Game::checkExpiredMarketOffers, this)));
 }
 
 void Game::parsePlayerExtendedOpcode(uint32_t playerId, uint8_t opcode, const std::string& buffer)

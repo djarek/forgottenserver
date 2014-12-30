@@ -48,7 +48,7 @@ class ConnectionManager
 		void closeAll();
 
 	protected:
-		ConnectionManager() {}
+		ConnectionManager() = default;
 
 		std::unordered_set<Connection_ptr> m_connections;
 		std::recursive_mutex m_connectionManagerLock;
@@ -107,11 +107,11 @@ class Connection : public std::enable_shared_from_this<Connection>
 
 		uint32_t getIP() const;
 
-		int32_t addRef() {
-			return ++m_refCount;
+		void addRef() {
+			++m_refCount;
 		}
-		int32_t unRef() {
-			return --m_refCount;
+		void unRef() {
+			--m_refCount;
 		}
 
 	private:

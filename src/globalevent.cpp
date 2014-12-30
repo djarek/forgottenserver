@@ -72,11 +72,7 @@ Event* GlobalEvents::getEvent(const std::string& nodeName)
 
 bool GlobalEvents::registerEvent(Event* event, const pugi::xml_node&)
 {
-	GlobalEvent* globalEvent = dynamic_cast<GlobalEvent*>(event);
-	if (!globalEvent) {
-		return false;
-	}
-
+	GlobalEvent* globalEvent = reinterpret_cast<GlobalEvent*>(event);
 	if (globalEvent->getEventType() == GLOBALEVENT_TIMER) {
 		GlobalEventMap::iterator it = timerMap.find(globalEvent->getName());
 		if (it == timerMap.end()) {
@@ -238,31 +234,30 @@ bool GlobalEvent::configureEvent(const pugi::xml_node& node)
 	pugi::xml_attribute attr;
 	if ((attr = node.attribute("time"))) {
 		std::vector<int32_t> params = vectorAtoi(explodeString(attr.as_string(), ":"));
-		if (params.front() < 0 || params.front() > 23) {
+
+		int32_t hour = params.front();
+		if (hour < 0 || hour > 23) {
 			std::cout << "[Error - GlobalEvent::configureEvent] Invalid hour \"" << attr.as_string() << "\" for globalevent with name: " << m_name << std::endl;
 			return false;
 		}
 
-		m_interval |= params.front() << 16;
-		int32_t hour = params.front();
+		m_interval |= hour << 16;
+
 		int32_t min = 0;
 		int32_t sec = 0;
-
 		if (params.size() > 1) {
-			if (params[1] < 0 || params[1] > 59) {
+			min = params[1];
+			if (min < 0 || min > 59) {
 				std::cout << "[Error - GlobalEvent::configureEvent] Invalid minute \"" << attr.as_string() << "\" for globalevent with name: " << m_name << std::endl;
 				return false;
 			}
 
-			min = params[1];
-
 			if (params.size() > 2) {
-				if (params[2] < 0 || params[2] > 59) {
+				sec = params[2];
+				if (sec < 0 || sec > 59) {
 					std::cout << "[Error - GlobalEvent::configureEvent] Invalid second \"" << attr.as_string() << "\" for globalevent with name: " << m_name << std::endl;
 					return false;
 				}
-
-				sec = params[2];
 			}
 		}
 
@@ -271,8 +266,8 @@ bool GlobalEvent::configureEvent(const pugi::xml_node& node)
 		timeinfo->tm_hour = hour;
 		timeinfo->tm_min = min;
 		timeinfo->tm_sec = sec;
-		time_t difference = (time_t)difftime(mktime(timeinfo), current_time);
 
+		time_t difference = static_cast<time_t>(difftime(mktime(timeinfo), current_time));
 		if (difference < 0) {
 			difference += 86400;
 		}
@@ -301,7 +296,7 @@ bool GlobalEvent::configureEvent(const pugi::xml_node& node)
 	return true;
 }
 
-std::string GlobalEvent::getScriptEventName()
+std::string GlobalEvent::getScriptEventName() const
 {
 	switch (m_eventType) {
 		case GLOBALEVENT_STARTUP: return "onStartup";
@@ -314,7 +309,7 @@ std::string GlobalEvent::getScriptEventName()
 
 bool GlobalEvent::executeRecord(uint32_t current, uint32_t old)
 {
-	//onRecord(current, old, cid)
+	//onRecord(current, old)
 	if (!m_scriptInterface->reserveScriptEnv()) {
 		std::cout << "[Error - GlobalEvent::executeRecord] Call stack overflow" << std::endl;
 		return false;

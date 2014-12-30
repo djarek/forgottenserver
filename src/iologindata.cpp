@@ -234,7 +234,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 
 	player->bankBalance = result->getNumber<uint64_t>("balance");
 
-	player->setSex((PlayerSex_t)result->getDataInt("sex"));
+	player->setSex(static_cast<PlayerSex_t>(result->getDataInt("sex")));
 	player->level = std::max<uint32_t>(1, result->getDataInt("level"));
 
 	uint64_t experience = result->getNumber<uint64_t>("experience");
@@ -254,7 +254,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 	}
 
 	player->soul = result->getDataInt("soul");
-	player->capacity = result->getDataInt("cap");
+	player->capacity = result->getDataInt("cap") * 100;
 	player->blessings = result->getDataInt("blessings");
 
 	unsigned long conditionsSize;
@@ -344,16 +344,17 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 	static const std::string skillNames[] = {"skill_fist", "skill_club", "skill_sword", "skill_axe", "skill_dist", "skill_shielding", "skill_fishing"};
 	static const std::string skillNameTries[] = {"skill_fist_tries", "skill_club_tries", "skill_sword_tries", "skill_axe_tries", "skill_dist_tries", "skill_shielding_tries", "skill_fishing_tries"};
 	static const size_t size = sizeof(skillNames) / sizeof(std::string);
-	for (size_t i = 0; i < size; ++i) {
-		uint32_t skillLevel = result->getDataInt(skillNames[i]);
+	for (uint8_t i = 0; i < size; ++i) {
+		uint16_t skillLevel = result->getNumber<uint16_t>(skillNames[i]);
 		uint64_t skillTries = result->getNumber<uint64_t>(skillNameTries[i]);
 		uint64_t nextSkillTries = player->vocation->getReqSkillTries(i, skillLevel + 1);
 		if (skillTries > nextSkillTries) {
 			skillTries = 0;
 		}
-		player->skills[i][SKILLVALUE_LEVEL] = skillLevel;
-		player->skills[i][SKILLVALUE_TRIES] = skillTries;
-		player->skills[i][SKILLVALUE_PERCENT] = Player::getPercentLevel(skillTries, nextSkillTries);
+
+		player->skills[i].level = skillLevel;
+		player->skills[i].tries = skillTries;
+		player->skills[i].percent = Player::getPercentLevel(skillTries, nextSkillTries);
 	}
 
 	std::ostringstream query;
@@ -613,7 +614,7 @@ bool IOLoginData::savePlayer(Player* player)
 				return false;
 			}
 
-			propWriteStream.ADD_UCHAR(CONDITIONATTR_END);
+			propWriteStream.write<uint8_t>(CONDITIONATTR_END);
 		}
 	}
 
@@ -647,7 +648,7 @@ bool IOLoginData::savePlayer(Player* player)
 	query << "`posy` = " << loginPosition.getY() << ',';
 	query << "`posz` = " << loginPosition.getZ() << ',';
 
-	query << "`cap` = " << player->getCapacity() << ',';
+	query << "`cap` = " << (player->capacity / 100) << ',';
 	query << "`sex` = " << player->sex << ',';
 
 	if (player->lastLoginSaved != 0) {
@@ -684,20 +685,20 @@ bool IOLoginData::savePlayer(Player* player)
 	query << "`offlinetraining_skill` = " << player->getOfflineTrainingSkill() << ',';
 	query << "`stamina` = " << player->getStaminaMinutes() << ',';
 
-	query << "`skill_fist` = " << player->skills[SKILL_FIST][SKILLVALUE_LEVEL] << ',';
-	query << "`skill_fist_tries` = " << player->skills[SKILL_FIST][SKILLVALUE_TRIES] << ',';
-	query << "`skill_club` = " << player->skills[SKILL_CLUB][SKILLVALUE_LEVEL] << ',';
-	query << "`skill_club_tries` = " << player->skills[SKILL_CLUB][SKILLVALUE_TRIES] << ',';
-	query << "`skill_sword` = " << player->skills[SKILL_SWORD][SKILLVALUE_LEVEL] << ',';
-	query << "`skill_sword_tries` = " << player->skills[SKILL_SWORD][SKILLVALUE_TRIES] << ',';
-	query << "`skill_axe` = " << player->skills[SKILL_AXE][SKILLVALUE_LEVEL] << ',';
-	query << "`skill_axe_tries` = " << player->skills[SKILL_AXE][SKILLVALUE_TRIES] << ',';
-	query << "`skill_dist` = " << player->skills[SKILL_DISTANCE][SKILLVALUE_LEVEL] << ',';
-	query << "`skill_dist_tries` = " << player->skills[SKILL_DISTANCE][SKILLVALUE_TRIES] << ',';
-	query << "`skill_shielding` = " << player->skills[SKILL_SHIELD][SKILLVALUE_LEVEL] << ',';
-	query << "`skill_shielding_tries` = " << player->skills[SKILL_SHIELD][SKILLVALUE_TRIES] << ',';
-	query << "`skill_fishing` = " << player->skills[SKILL_FISHING][SKILLVALUE_LEVEL] << ',';
-	query << "`skill_fishing_tries` = " << player->skills[SKILL_FISHING][SKILLVALUE_TRIES] << ',';
+	query << "`skill_fist` = " << player->skills[SKILL_FIST].level << ',';
+	query << "`skill_fist_tries` = " << player->skills[SKILL_FIST].tries << ',';
+	query << "`skill_club` = " << player->skills[SKILL_CLUB].level << ',';
+	query << "`skill_club_tries` = " << player->skills[SKILL_CLUB].tries << ',';
+	query << "`skill_sword` = " << player->skills[SKILL_SWORD].level << ',';
+	query << "`skill_sword_tries` = " << player->skills[SKILL_SWORD].tries << ',';
+	query << "`skill_axe` = " << player->skills[SKILL_AXE].level << ',';
+	query << "`skill_axe_tries` = " << player->skills[SKILL_AXE].tries << ',';
+	query << "`skill_dist` = " << player->skills[SKILL_DISTANCE].level << ',';
+	query << "`skill_dist_tries` = " << player->skills[SKILL_DISTANCE].tries << ',';
+	query << "`skill_shielding` = " << player->skills[SKILL_SHIELD].level << ',';
+	query << "`skill_shielding_tries` = " << player->skills[SKILL_SHIELD].tries << ',';
+	query << "`skill_fishing` = " << player->skills[SKILL_FISHING].level << ',';
+	query << "`skill_fishing_tries` = " << player->skills[SKILL_FISHING].tries << ',';
 
 	if (!player->isOffline()) {
 		query << "`onlinetime` = `onlinetime` + " << (time(nullptr) - player->lastLoginSaved) << ',';
@@ -723,17 +724,15 @@ bool IOLoginData::savePlayer(Player* player)
 
 	query.str("");
 
-	DBInsert stmt;
-	stmt.setQuery("INSERT INTO `player_spells` (`player_id`, `name` ) VALUES ");
-
+	DBInsert spellsQuery("INSERT INTO `player_spells` (`player_id`, `name` ) VALUES ");
 	for (const std::string& spellName : player->learnedInstantSpellList) {
 		query << player->getGUID() << ',' << db->escapeString(spellName);
-		if (!stmt.addRow(query)) {
+		if (!spellsQuery.addRow(query)) {
 			return false;
 		}
 	}
 
-	if (!stmt.execute()) {
+	if (!spellsQuery.execute()) {
 		return false;
 	}
 
@@ -743,7 +742,7 @@ bool IOLoginData::savePlayer(Player* player)
 		return false;
 	}
 
-	stmt.setQuery("INSERT INTO `player_items` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+	DBInsert itemsQuery("INSERT INTO `player_items` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
 
 	ItemBlockList itemList;
 	for (int32_t slotId = 1; slotId <= 10; ++slotId) {
@@ -753,7 +752,7 @@ bool IOLoginData::savePlayer(Player* player)
 		}
 	}
 
-	if (!saveItems(player, itemList, stmt, propWriteStream)) {
+	if (!saveItems(player, itemList, itemsQuery, propWriteStream)) {
 		return false;
 	}
 
@@ -766,7 +765,7 @@ bool IOLoginData::savePlayer(Player* player)
 			return false;
 		}
 
-		stmt.setQuery("INSERT INTO `player_depotitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+		DBInsert depotQuery("INSERT INTO `player_depotitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
 		itemList.clear();
 
 		for (const auto& it : player->depotChests) {
@@ -776,7 +775,7 @@ bool IOLoginData::savePlayer(Player* player)
 			}
 		}
 
-		if (!saveItems(player, itemList, stmt, propWriteStream)) {
+		if (!saveItems(player, itemList, depotQuery, propWriteStream)) {
 			return false;
 		}
 	}
@@ -788,14 +787,14 @@ bool IOLoginData::savePlayer(Player* player)
 		return false;
 	}
 
-	stmt.setQuery("INSERT INTO `player_inboxitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+	DBInsert inboxQuery("INSERT INTO `player_inboxitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
 	itemList.clear();
 
 	for (Item* item : player->getInbox()->getItemList()) {
 		itemList.emplace_back(0, item);
 	}
 
-	if (!saveItems(player, itemList, stmt, propWriteStream)) {
+	if (!saveItems(player, itemList, inboxQuery, propWriteStream)) {
 		return false;
 	}
 
@@ -807,17 +806,17 @@ bool IOLoginData::savePlayer(Player* player)
 
 	query.str("");
 
-	stmt.setQuery("INSERT INTO `player_storage` (`player_id`, `key`, `value`) VALUES ");
+	DBInsert storageQuery("INSERT INTO `player_storage` (`player_id`, `key`, `value`) VALUES ");
 	player->genReservedStorageRange();
 
 	for (const auto& it : player->storageMap) {
 		query << player->getGUID() << ',' << it.first << ',' << it.second;
-		if (!stmt.addRow(query)) {
+		if (!storageQuery.addRow(query)) {
 			return false;
 		}
 	}
 
-	if (!stmt.execute()) {
+	if (!storageQuery.execute()) {
 		return false;
 	}
 
@@ -825,33 +824,28 @@ bool IOLoginData::savePlayer(Player* player)
 	return transaction.commit();
 }
 
-bool IOLoginData::getNameByGuid(uint32_t guid, std::string& name)
+std::string IOLoginData::getNameByGuid(uint32_t guid)
 {
 	std::ostringstream query;
 	query << "SELECT `name` FROM `players` WHERE `id` = " << guid;
 	DBResult_ptr result = Database::getInstance()->storeQuery(query.str());
 	if (!result) {
-		return false;
+		return std::string();
 	}
-
-	name = result->getDataString("name");
-	return true;
+	return result->getDataString("name");
 }
 
-bool IOLoginData::getGuidByName(uint32_t& guid, std::string& name)
+uint32_t IOLoginData::getGuidByName(const std::string& name)
 {
 	Database* db = Database::getInstance();
 
 	std::ostringstream query;
-	query << "SELECT `id`, `name` FROM `players` WHERE `name` = " << db->escapeString(name);
+	query << "SELECT `id` FROM `players` WHERE `name` = " << db->escapeString(name);
 	DBResult_ptr result = db->storeQuery(query.str());
 	if (!result) {
-		return false;
+		return 0;
 	}
-
-	name = result->getDataString("name");
-	guid = result->getDataInt("id");
-	return true;
+	return result->getNumber<uint32_t>("id");
 }
 
 bool IOLoginData::getGuidByNameEx(uint32_t& guid, bool& specialVip, std::string& name)

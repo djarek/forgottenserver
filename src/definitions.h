@@ -21,7 +21,7 @@
 #define FS_DEFINITIONS_H_877452FEC245450C9F96B8FD268D8963
 
 #define STATUS_SERVER_NAME "The Forgotten Server"
-#define STATUS_SERVER_VERSION "1.0"
+#define STATUS_SERVER_VERSION "1.1"
 #define STATUS_SERVER_DEVELOPERS "Mark Samman"
 
 #define CLIENT_VERSION_MIN 1041
@@ -61,14 +61,10 @@
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
 
-//Windows 2000	0x0500
-//Windows XP	0x0501
-//Windows 2003	0x0502
-//Windows Vista	0x0600
-#ifdef _WIN32_WINNT
-#undef _WIN32_WINNT
+#ifndef _WIN32_WINNT
+// 0x0602: Windows 7
+#define _WIN32_WINNT 0x0602
 #endif
-#define _WIN32_WINNT 0x0501
 #endif
 
 #ifndef M_PI

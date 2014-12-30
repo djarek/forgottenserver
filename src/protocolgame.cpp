@@ -80,11 +80,6 @@ ProtocolGame::ProtocolGame(Connection_ptr connection) :
 	//
 }
 
-ProtocolGame::~ProtocolGame()
-{
-	player = nullptr;
-}
-
 void ProtocolGame::setPlayer(Player* p)
 {
 	player = p;
@@ -192,7 +187,7 @@ void ProtocolGame::login(const std::string& name, uint32_t accountId, OperatingS
 			return;
 		}
 
-		player->setOperatingSystem((OperatingSystem_t)operatingSystem);
+		player->setOperatingSystem(operatingSystem);
 
 		if (!g_game.placeCreature(player, player->getLoginPosition())) {
 			if (!g_game.placeCreature(player, player->getTemplePosition(), false, true)) {
@@ -245,7 +240,7 @@ void ProtocolGame::connect(uint32_t playerId, OperatingSystem_t operatingSystem)
 
 	g_chat->removeUserFromAllChannels(*player);
 	player->clearModalWindows();
-	player->setOperatingSystem((OperatingSystem_t)operatingSystem);
+	player->setOperatingSystem(operatingSystem);
 	player->isConnecting = false;
 
 	player->client = this;
@@ -299,7 +294,7 @@ void ProtocolGame::logout(bool displayEffect, bool forced)
 
 bool ProtocolGame::startLiveCast(const std::string& password /*= ""*/)
 {
-	if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !getConnection()) {
+	if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !getConnection()) {
 		return false;
 	}
 
@@ -361,7 +356,7 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 		return;
 	}
 
-	OperatingSystem_t operatingSystem = (OperatingSystem_t)msg.get<uint16_t>();
+	OperatingSystem_t operatingSystem = static_cast<OperatingSystem_t>(msg.get<uint16_t>());
 	version = msg.get<uint16_t>();
 
 	msg.SkipBytes(5); // U32 clientVersion, U8 clientType
@@ -632,7 +627,7 @@ void ProtocolGame::parsePacket(NetworkMessage& msg)
 		case 0xF9: parseModalWindowAnswer(msg); break;
 
 		default:
-			// std::cout << "Player: " << player->getName() << " sent an unknown packet header: 0x" << std::hex << (int16_t)recvbyte << std::dec << "!" << std::endl;
+			// std::cout << "Player: " << player->getName() << " sent an unknown packet header: 0x" << std::hex << static_cast<uint16_t>(recvbyte) << std::dec << "!" << std::endl;
 			break;
 	}
 
@@ -980,15 +975,15 @@ void ProtocolGame::parseLookInBattleList(NetworkMessage& msg)
 
 void ProtocolGame::parseSay(NetworkMessage& msg)
 {
-	SpeakClasses type = (SpeakClasses)msg.GetByte();
-
 	std::string receiver;
-	uint16_t channelId = 0;
+	uint16_t channelId;
 
+	SpeakClasses type = static_cast<SpeakClasses>(msg.GetByte());
 	switch (type) {
 		case TALKTYPE_PRIVATE_TO:
 		case TALKTYPE_PRIVATE_RED_TO:
 			receiver = msg.GetString();
+			channelId = 0;
 			break;
 
 		case TALKTYPE_CHANNEL_Y:
@@ -997,11 +992,11 @@ void ProtocolGame::parseSay(NetworkMessage& msg)
 			break;
 
 		default:
+			channelId = 0;
 			break;
 	}
 
 	const std::string text = msg.GetString();
-
 	if (text.length() > 255) {
 		return;
 	}
@@ -1356,7 +1351,7 @@ void ProtocolGame::sendCreatureSkull(const Creature* creature)
 	NetworkMessage msg;
 	msg.AddByte(0x90);
 	msg.add<uint32_t>(creature->getID());
-	msg.AddByte(player->getSkullClient(creature->getPlayer()));
+	msg.AddByte(player->getSkullClient(creature));
 	writeToOutputBuffer(msg);
 }
 
@@ -1387,7 +1382,7 @@ void ProtocolGame::sendCreatureSquare(const Creature* creature, SquareColor_t co
 	NetworkMessage msg;
 	msg.AddByte(0x86);
 	msg.add<uint32_t>(creature->getID());
-	msg.AddByte((uint8_t)color);
+	msg.AddByte(color);
 	writeToOutputBuffer(msg);
 }
 
@@ -1763,13 +1758,13 @@ void ProtocolGame::sendMarketEnter(uint32_t depotId)
 				ItemAttributes* attributes = item->getAttributes();
 				for (const auto& attr : attributes->getList()) {
 					if (attr.type == ITEM_ATTRIBUTE_CHARGES) {
-						uint16_t charges = static_cast<uint16_t>(0xFFFF & reinterpret_cast<ptrdiff_t>(attr.value));
+						uint16_t charges = static_cast<uint16_t>(reinterpret_cast<ptrdiff_t>(attr.value));
 						if (charges != itemType.charges) {
 							badAttribute = true;
 							break;
 						}
 					} else if (attr.type == ITEM_ATTRIBUTE_DURATION) {
-						uint32_t duration = static_cast<uint32_t>(0xFFFFFFFF & reinterpret_cast<ptrdiff_t>(attr.value));
+						uint32_t duration = static_cast<uint32_t>(reinterpret_cast<ptrdiff_t>(attr.value));
 						if (duration != itemType.decayTime) {
 							badAttribute = true;
 							break;
@@ -2117,9 +2112,18 @@ void ProtocolGame::sendMarketDetail(uint16_t itemId)
 
 	msg.AddString(weaponName);
 
-	if (it.weight > 0) {
+	if (it.weight != 0) {
 		std::ostringstream ss;
-		ss << std::fixed << std::setprecision(2) << it.weight << " oz";
+		if (it.weight < 10) {
+			ss << "0.0" << it.weight;
+		} else if (it.weight < 100) {
+			ss << "0." << it.weight;
+		} else {
+			std::string weightString = std::to_string(it.weight);
+			weightString.insert(weightString.end() - 2, '.');
+			ss << weightString;
+		}
+		ss << " oz";
 		msg.AddString(ss.str());
 	} else {
 		msg.add<uint16_t>(0x00);
@@ -2410,7 +2414,7 @@ void ProtocolGame::sendCreatureHealth(const Creature* creature)
 	if (creature->isHealthHidden()) {
 		msg.AddByte(0x00);
 	} else {
-		msg.AddByte((int32_t)std::ceil(((float)creature->getHealth()) * 100 / std::max<int32_t>(creature->getMaxHealth(), 1)));
+		msg.AddByte(static_cast<int32_t>(std::ceil(static_cast<float>(creature->getHealth() * 100) / std::max<int32_t>(creature->getMaxHealth(), 1))));
 	}
 	writeToOutputBuffer(msg);
 }
@@ -2989,10 +2993,10 @@ void ProtocolGame::AddCreature(NetworkMessage& msg, const Creature* creature, bo
 	if (creature->isHealthHidden()) {
 		msg.AddByte(0x00);
 	} else {
-		msg.AddByte((int32_t)std::ceil(((float)creature->getHealth()) * 100 / std::max<int32_t>(creature->getMaxHealth(), 1)));
+		msg.AddByte(static_cast<int32_t>(std::ceil(static_cast<float>(creature->getHealth() * 100) / std::max<int32_t>(creature->getMaxHealth(), 1))));
 	}
 
-	msg.AddByte((uint8_t)creature->getDirection());
+	msg.AddByte(creature->getDirection());
 
 	if (!creature->isInGhostMode() && !creature->isInvisible()) {
 		AddOutfit(msg, creature->getCurrentOutfit());
@@ -3008,7 +3012,7 @@ void ProtocolGame::AddCreature(NetworkMessage& msg, const Creature* creature, bo
 
 	msg.add<uint16_t>(creature->getStepSpeed() / 2);
 
-	msg.AddByte(player->getSkullClient(otherPlayer));
+	msg.AddByte(player->getSkullClient(creature));
 	msg.AddByte(player->getPartyShield(otherPlayer));
 
 	if (!known) {
@@ -3046,22 +3050,22 @@ void ProtocolGame::AddPlayerStats(NetworkMessage& msg)
 {
 	msg.AddByte(0xA0);
 
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getHealth()));
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getPlayerInfo(PLAYERINFO_MAXHEALTH)));
+	msg.add<uint16_t>(std::min<int32_t>(player->getHealth(), std::numeric_limits<uint16_t>::max()));
+	msg.add<uint16_t>(std::min<int32_t>(player->getPlayerInfo(PLAYERINFO_MAXHEALTH), std::numeric_limits<uint16_t>::max()));
 
-	msg.add<uint32_t>(uint32_t(player->getFreeCapacity() * 100));
-	msg.add<uint32_t>(uint32_t(player->getCapacity() * 100));
+	msg.add<uint32_t>(player->getFreeCapacity());
+	msg.add<uint32_t>(player->getCapacity());
 
 	msg.add<uint64_t>(player->getExperience());
 
 	msg.add<uint16_t>(player->getLevel());
 	msg.AddByte(player->getPlayerInfo(PLAYERINFO_LEVELPERCENT));
 
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getMana()));
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getPlayerInfo(PLAYERINFO_MAXMANA)));
+	msg.add<uint16_t>(std::min<int32_t>(player->getMana(), std::numeric_limits<uint16_t>::max()));
+	msg.add<uint16_t>(std::min<int32_t>(player->getPlayerInfo(PLAYERINFO_MAXMANA), std::numeric_limits<uint16_t>::max()));
 
-	msg.AddByte(std::min<uint32_t>(0xFF, player->getMagicLevel()));
-	msg.AddByte(std::min<uint32_t>(0xFF, player->getBaseMagicLevel()));
+	msg.AddByte(std::min<uint32_t>(player->getMagicLevel(), std::numeric_limits<uint8_t>::max()));
+	msg.AddByte(std::min<uint32_t>(player->getBaseMagicLevel(), std::numeric_limits<uint8_t>::max()));
 	msg.AddByte(player->getPlayerInfo(PLAYERINFO_MAGICLEVELPERCENT));
 
 	msg.AddByte(player->getPlayerInfo(PLAYERINFO_SOUL));
@@ -3080,33 +3084,11 @@ void ProtocolGame::AddPlayerSkills(NetworkMessage& msg)
 {
 	msg.AddByte(0xA1);
 
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getSkill(SKILL_FIST, SKILLVALUE_LEVEL)));
-	msg.add<uint16_t>(player->getBaseSkill(SKILL_FIST));
-	msg.AddByte(player->getSkill(SKILL_FIST, SKILLVALUE_PERCENT));
-
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getSkill(SKILL_CLUB, SKILLVALUE_LEVEL)));
-	msg.add<uint16_t>(player->getBaseSkill(SKILL_CLUB));
-	msg.AddByte(player->getSkill(SKILL_CLUB, SKILLVALUE_PERCENT));
-
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getSkill(SKILL_SWORD, SKILLVALUE_LEVEL)));
-	msg.add<uint16_t>(player->getBaseSkill(SKILL_SWORD));
-	msg.AddByte(player->getSkill(SKILL_SWORD, SKILLVALUE_PERCENT));
-
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getSkill(SKILL_AXE, SKILLVALUE_LEVEL)));
-	msg.add<uint16_t>(player->getBaseSkill(SKILL_AXE));
-	msg.AddByte(player->getSkill(SKILL_AXE, SKILLVALUE_PERCENT));
-
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getSkill(SKILL_DISTANCE, SKILLVALUE_LEVEL)));
-	msg.add<uint16_t>(player->getBaseSkill(SKILL_DISTANCE));
-	msg.AddByte(player->getSkill(SKILL_DISTANCE, SKILLVALUE_PERCENT));
-
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getSkill(SKILL_SHIELD, SKILLVALUE_LEVEL)));
-	msg.add<uint16_t>(player->getBaseSkill(SKILL_SHIELD));
-	msg.AddByte(player->getSkill(SKILL_SHIELD, SKILLVALUE_PERCENT));
-
-	msg.add<uint16_t>(std::min<int32_t>(0xFFFF, player->getSkill(SKILL_FISHING, SKILLVALUE_LEVEL)));
-	msg.add<uint16_t>(player->getBaseSkill(SKILL_FISHING));
-	msg.AddByte(player->getSkill(SKILL_FISHING, SKILLVALUE_PERCENT));
+	for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
+		msg.add<uint16_t>(std::min<int32_t>(player->getSkillLevel(i), std::numeric_limits<uint16_t>::max()));
+		msg.add<uint16_t>(player->getBaseSkill(i));
+		msg.AddByte(player->getSkillPercent(i));
+	}
 }
 
 void ProtocolGame::AddOutfit(NetworkMessage& msg, const Outfit_t& outfit)
@@ -3256,7 +3238,7 @@ void ProtocolGame::AddShopItem(NetworkMessage& msg, const ShopInfo& item)
 	}
 
 	msg.AddString(item.realName);
-	msg.add<uint32_t>(static_cast<uint32_t>(it.weight * 100));
+	msg.add<uint32_t>(it.weight);
 	msg.add<uint32_t>(item.buyPrice);
 	msg.add<uint32_t>(item.sellPrice);
 }

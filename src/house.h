@@ -33,10 +33,10 @@ class Player;
 class AccessList
 {
 	public:
-		bool parseList(const std::string& _list);
-		bool addPlayer(const std::string& name);
-		bool addGuild(const std::string& guildName);
-		bool addExpression(const std::string& expression);
+		void parseList(const std::string& _list);
+		void addPlayer(const std::string& name);
+		void addGuild(const std::string& name);
+		void addExpression(const std::string& expression);
 
 		bool isInList(const Player* player);
 
@@ -50,16 +50,20 @@ class AccessList
 		std::list<std::pair<std::regex, bool>> regExList;
 };
 
-class Door : public Item
+class Door final : public Item
 {
 	public:
 		Door(uint16_t _type);
-		virtual ~Door();
+		~Door();
 
-		virtual Door* getDoor() {
+		// non-copyable
+		Door(const Door&) = delete;
+		Door& operator=(const Door&) = delete;
+
+		Door* getDoor() final {
 			return this;
 		}
-		virtual const Door* getDoor() const {
+		const Door* getDoor() const final {
 			return this;
 		}
 
@@ -68,8 +72,8 @@ class Door : public Item
 		}
 
 		//serialization
-		virtual Attr_ReadValue readAttr(AttrTypes_t attr, PropStream& propStream);
-		virtual bool serializeAttr(PropWriteStream& propWriteStream) const;
+		Attr_ReadValue readAttr(AttrTypes_t attr, PropStream& propStream) final;
+		bool serializeAttr(PropWriteStream& propWriteStream) const final;
 
 		void setDoorId(uint32_t _doorId) {
 			setIntAttr(ITEM_ATTRIBUTE_DOORID, _doorId);
@@ -83,9 +87,8 @@ class Door : public Item
 		void setAccessList(const std::string& textlist);
 		bool getAccessList(std::string& list) const;
 
-		//overrides
-		virtual void onRemoved();
-		void stealAttributes(Item* item);
+		void onRemoved() final;
+		void moveAttributes(Item* item) final;
 
 	protected:
 		void setHouse(House* _house);
@@ -111,7 +114,7 @@ enum AccessHouseLevel_t {
 typedef std::list<HouseTile*> HouseTileList;
 typedef std::list<BedItem*> HouseBedItemList;
 
-class HouseTransferItem : public Item
+class HouseTransferItem final : public Item
 {
 	public:
 		static HouseTransferItem* createHouseTransferItem(House* house);
@@ -119,14 +122,9 @@ class HouseTransferItem : public Item
 		HouseTransferItem(House* _house) : Item(0) {
 			house = _house;
 		}
-		virtual ~HouseTransferItem() {}
 
-		virtual bool onTradeEvent(TradeEvents_t event, Player* owner);
-
-		House* getHouse() {
-			return house;
-		}
-		virtual bool canTransform() const {
+		void onTradeEvent(TradeEvents_t event, Player* owner) final;
+		bool canTransform() const final {
 			return false;
 		}
 
@@ -138,7 +136,6 @@ class House
 {
 	public:
 		House(uint32_t _houseid);
-		~House() {}
 
 		void addTile(HouseTile* tile);
 		void updateDoorDescription() const;
@@ -228,7 +225,7 @@ class House
 			return bedsList;
 		}
 		uint32_t getBedCount() {
-			return (uint32_t)std::ceil((double)bedsList.size() / 2);   //each bed takes 2 sqms of space, ceil is just for bad maps
+			return static_cast<uint32_t>(std::ceil(bedsList.size() / 2.));   //each bed takes 2 sqms of space, ceil is just for bad maps
 		}
 
 	private:
@@ -280,6 +277,10 @@ class Houses
 				delete it.second;
 			}
 		}
+
+		// non-copyable
+		Houses(const Houses&) = delete;
+		Houses& operator=(const Houses&) = delete;
 
 	public:
 		static Houses& getInstance() {

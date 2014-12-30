@@ -32,9 +32,9 @@ typedef std::map<uint32_t, Player*> InvitedMap;
 class ChatChannel
 {
 	public:
-		ChatChannel() {}
+		ChatChannel() = default;
 		ChatChannel(uint16_t channelId, const std::string& channelName) : name(channelName), canJoinEvent(-1), onJoinEvent(-1), onLeaveEvent(-1), onSpeakEvent(-1), id(channelId), publicChannel(false) {}
-		virtual ~ChatChannel() {}
+		virtual ~ChatChannel() = default;
 
 		bool addUser(Player& player);
 		bool removeUser(const Player& player);
@@ -82,17 +82,16 @@ class ChatChannel
 	friend class Chat;
 };
 
-class PrivateChatChannel : public ChatChannel
+class PrivateChatChannel final : public ChatChannel
 {
 	public:
 		PrivateChatChannel(uint16_t channelId, const std::string& channelName);
-		virtual ~PrivateChatChannel() {}
 
-		virtual uint32_t getOwner() const {
+		uint32_t getOwner() const final {
 			return m_owner;
 		}
-		void setOwner(uint32_t id) {
-			m_owner = id;
+		void setOwner(uint32_t owner) {
+			m_owner = owner;
 		}
 
 		bool isInvited(const Player& player) const;
@@ -109,7 +108,7 @@ class PrivateChatChannel : public ChatChannel
 			return m_invites;
 		}
 
-		const InvitedMap* getInvitedUsersPtr() const {
+		const InvitedMap* getInvitedUsersPtr() const final {
 			return &m_invites;
 		}
 

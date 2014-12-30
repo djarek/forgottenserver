@@ -37,14 +37,11 @@ class NetworkMessage
 		enum { max_body_length = NETWORKMESSAGE_MAXSIZE - header_length - crypto_length - xtea_multiple };
 		enum { max_protocol_body_length = max_body_length - 10 };
 
-		// constructor/destructor
+		// constructor
 		NetworkMessage() {
 			m_MsgBuf = m_RealBuf;
 			Reset();
 		}
-		virtual ~NetworkMessage() {}
-
-		// resets the internal buffer to an empty message
 
 	protected:
 		void Reset() {
@@ -69,7 +66,7 @@ class NetworkMessage
 				return 0;
 			}
 
-			T v = *(T*)(m_MsgBuf + m_ReadPos);
+			T v = *reinterpret_cast<T*>(m_MsgBuf + m_ReadPos);
 			m_ReadPos += sizeof(T);
 			return v;
 		}
@@ -101,7 +98,7 @@ class NetworkMessage
 				return;
 			}
 
-			*(T*)(m_MsgBuf + m_ReadPos) = value;
+			*reinterpret_cast<T*>(m_MsgBuf + m_ReadPos) = value;
 			m_ReadPos += sizeof(T);
 			m_MsgSize += sizeof(T);
 		}
@@ -144,7 +141,7 @@ class NetworkMessage
 		}
 		char* getBodyBuffer() {
 			m_ReadPos = 2;
-			return (char*)&m_RealBuf[header_length];
+			return reinterpret_cast<char*>(&m_RealBuf[header_length]);
 		}
 
 	protected:

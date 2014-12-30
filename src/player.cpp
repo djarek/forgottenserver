@@ -51,7 +51,7 @@ MuteCountMap Player::muteCountMap;
 uint32_t Player::playerAutoID = 0x10000000;
 
 Player::Player(ProtocolGame* p) :
-	Creature()
+	Creature(), inventory(), varSkills(), varStats(), inventoryAbilities()
 {
 	client = p;
 	isConnecting = false;
@@ -62,7 +62,7 @@ Player::Player(ProtocolGame* p) :
 
 	accountNumber = 0;
 	setVocation(0);
-	capacity = 400.00;
+	capacity = 40000;
 	mana = 0;
 	manaMax = 0;
 	manaSpent = 0;
@@ -132,25 +132,6 @@ Player::Player(ProtocolGame* p) :
 	lastWalkthroughAttempt = 0;
 	lastToggleMount = 0;
 
-	for (int32_t i = 0; i < 11; i++) {
-		inventory[i] = nullptr;
-		inventoryAbilities[i] = false;
-	}
-
-	for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
-		skills[i][SKILLVALUE_LEVEL] = 10;
-		skills[i][SKILLVALUE_TRIES] = 0;
-		skills[i][SKILLVALUE_PERCENT] = 0;
-	}
-
-	for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
-		varSkills[i] = 0;
-	}
-
-	for (int32_t i = STAT_FIRST; i <= STAT_LAST; ++i) {
-		varStats[i] = 0;
-	}
-
 	maxDepotItems = 1000;
 	maxVipEntries = 20;
 
@@ -164,7 +145,6 @@ Player::Player(ProtocolGame* p) :
 	idleTime = 0;
 
 	skullTicks = 0;
-	skull = SKULL_NONE;
 	setParty(nullptr);
 
 	bankBalance = 0;
@@ -183,16 +163,16 @@ Player::Player(ProtocolGame* p) :
 	nextUseStaminaTime = 0;
 
 	lastQuestlogUpdate = 0;
+
+	inventoryWeight = 0;
 }
 
 Player::~Player()
 {
-	for (int i = 0; i < 11; ++i) {
-		if (inventory[i]) {
-			inventory[i]->setParent(nullptr);
-			inventory[i]->releaseThing2();
-			inventory[i] = nullptr;
-			inventoryAbilities[i] = false;
+	for (Item* item : inventory) {
+		if (item) {
+			item->setParent(nullptr);
+			item->releaseThing2();
 		}
 	}
 
@@ -203,13 +183,11 @@ Player::~Player()
 
 	inbox->releaseThing2();
 
-	//std::cout << "Player destructor " << this << std::endl;
-
 	setWriteItem(nullptr);
 	setEditHouse(nullptr);
 }
 
-bool Player::setVocation(uint32_t vocId)
+bool Player::setVocation(uint16_t vocId)
 {
 	Vocation* voc = g_vocations.getVocation(vocId);
 	if (!voc) {
@@ -234,7 +212,6 @@ bool Player::isPushable() const
 	if (hasFlag(PlayerFlag_CannotBePushed)) {
 		return false;
 	}
-
 	return Creature::isPushable();
 }
 
@@ -333,13 +310,14 @@ Item* Player::getInventoryItem(slots_t slot) const
 	return inventory[slot];
 }
 
-void Player::setConditionSuppressions(uint32_t conditions, bool remove)
+void Player::addConditionSuppressions(uint32_t conditions)
 {
-	if (!remove) {
-		conditionSuppressions |= conditions;
-	} else {
-		conditionSuppressions &= ~conditions;
-	}
+	conditionSuppressions |= conditions;
+}
+
+void Player::removeConditionSuppressions(uint32_t conditions)
+{
+	conditionSuppressions &= ~conditions;
 }
 
 Item* Player::getWeapon(bool ignoreAmmo /*= false*/)
@@ -369,14 +347,14 @@ Item* Player::getWeapon(bool ignoreAmmo /*= false*/)
 					if (ammoItem && ammoItem->getAmmoType() == it.ammoType) {
 						const Weapon* weapon = g_weapons->getWeapon(ammoItem);
 						if (weapon) {
-							shootRange = it.shootRange;
+							shootRange = item->getShootRange();
 							return ammoItem;
 						}
 					}
 				} else {
 					const Weapon* weapon = g_weapons->getWeapon(item);
 					if (weapon) {
-						shootRange = it.shootRange;
+						shootRange = item->getShootRange();
 						return item;
 					}
 				}
@@ -402,7 +380,7 @@ WeaponType_t Player::getWeaponType()
 int32_t Player::getWeaponSkill(const Item* item) const
 {
 	if (!item) {
-		return getSkill(SKILL_FIST, SKILLVALUE_LEVEL);
+		return getSkillLevel(SKILL_FIST);
 	}
 
 	int32_t attackSkill;
@@ -410,22 +388,22 @@ int32_t Player::getWeaponSkill(const Item* item) const
 	WeaponType_t weaponType = item->getWeaponType();
 	switch (weaponType) {
 		case WEAPON_SWORD: {
-			attackSkill = getSkill(SKILL_SWORD, SKILLVALUE_LEVEL);
+			attackSkill = getSkillLevel(SKILL_SWORD);
 			break;
 		}
 
 		case WEAPON_CLUB: {
-			attackSkill = getSkill(SKILL_CLUB, SKILLVALUE_LEVEL);
+			attackSkill = getSkillLevel(SKILL_CLUB);
 			break;
 		}
 
 		case WEAPON_AXE: {
-			attackSkill = getSkill(SKILL_AXE, SKILLVALUE_LEVEL);
+			attackSkill = getSkillLevel(SKILL_AXE);
 			break;
 		}
 
 		case WEAPON_DISTANCE: {
-			attackSkill = getSkill(SKILL_DISTANCE, SKILLVALUE_LEVEL);
+			attackSkill = getSkillLevel(SKILL_DISTANCE);
 			break;
 		}
 
@@ -448,7 +426,7 @@ int32_t Player::getArmor() const
 			armor += inventoryItem->getArmor();
 		}
 	}
-	return int32_t(armor * vocation->armorMultiplier);
+	return static_cast<int32_t>(armor * vocation->armorMultiplier);
 }
 
 void Player::getShieldAndWeapon(const Item*& shield, const Item*& weapon) const
@@ -500,15 +478,15 @@ int32_t Player::getDefense() const
 
 	if (shield && shield->getDefense() >= defenseValue) {
 		defenseValue = baseDefense + shield->getDefense() + extraDefense;
-		defenseSkill = getSkill(SKILL_SHIELD, SKILLVALUE_LEVEL);
+		defenseSkill = getSkillLevel(SKILL_SHIELD);
 	}
 
 	if (defenseSkill == 0) {
 		return 0;
 	}
 
-	defenseValue = int32_t(defenseValue * vocation->defenseMultiplier);
-	return ((int32_t)std::ceil(((float)(defenseSkill * (defenseValue * 0.015)) + (defenseValue * 0.1)) * defenseFactor));
+	defenseValue = static_cast<int32_t>(defenseValue * vocation->defenseMultiplier);
+	return static_cast<int32_t>(std::ceil((static_cast<float>(defenseSkill * (defenseValue * 0.015)) + (defenseValue * 0.1)) * defenseFactor));
 }
 
 float Player::getAttackFactor() const
@@ -573,14 +551,15 @@ uint16_t Player::getClientIcons() const
 
 void Player::updateInventoryWeight()
 {
-	if (!hasFlag(PlayerFlag_HasInfiniteCapacity)) {
-		inventoryWeight = 0.00;
+	if (hasFlag(PlayerFlag_HasInfiniteCapacity)) {
+		return;
+	}
 
-		for (int i = CONST_SLOT_FIRST; i <= CONST_SLOT_LAST; ++i) {
-			Item* item = inventory[i];
-			if (item) {
-				inventoryWeight += item->getWeight();
-			}
+	inventoryWeight = 0;
+	for (int i = CONST_SLOT_FIRST; i <= CONST_SLOT_LAST; ++i) {
+		const Item* item = inventory[i];
+		if (item) {
+			inventoryWeight += item->getWeight();
 		}
 	}
 }
@@ -600,61 +579,53 @@ int32_t Player::getPlayerInfo(playerinfo_t playerinfo) const
 	}
 }
 
-int32_t Player::getSkill(skills_t skilltype, skillsid_t skillinfo) const
+void Player::addSkillAdvance(skills_t skill, uint64_t count)
 {
-	int32_t n = skills[skilltype][skillinfo];
-	if (skillinfo == SKILLVALUE_LEVEL) {
-		n += varSkills[skilltype];
-	}
-	return std::max<int32_t>(0, n);
-}
-
-void Player::addSkillAdvance(skills_t skill, uint32_t count)
-{
-	if (count == 0) {
-		return;
-	}
-
-	uint64_t currReqTries = vocation->getReqSkillTries(skill, skills[skill][SKILLVALUE_LEVEL]);
-	uint64_t nextReqTries = vocation->getReqSkillTries(skill, skills[skill][SKILLVALUE_LEVEL] + 1);
+	uint64_t currReqTries = vocation->getReqSkillTries(skill, skills[skill].level);
+	uint64_t nextReqTries = vocation->getReqSkillTries(skill, skills[skill].level + 1);
 	if (currReqTries >= nextReqTries) {
 		//player has reached max skill
 		return;
 	}
 
+	g_events->eventPlayerOnGainSkillTries(this, skill, count);
+	if (count == 0) {
+		return;
+	}
+
 	bool sendUpdateSkills = false;
-	while ((skills[skill][SKILLVALUE_TRIES] + count) >= nextReqTries) {
-		count -= nextReqTries - skills[skill][SKILLVALUE_TRIES];
-		skills[skill][SKILLVALUE_LEVEL]++;
-		skills[skill][SKILLVALUE_TRIES] = 0;
-		skills[skill][SKILLVALUE_PERCENT] = 0;
+	while ((skills[skill].tries + count) >= nextReqTries) {
+		count -= nextReqTries - skills[skill].tries;
+		skills[skill].level++;
+		skills[skill].tries = 0;
+		skills[skill].percent = 0;
 
 		std::ostringstream ss;
-		ss << "You advanced to " << getSkillName(skill) << " level " << skills[skill][SKILLVALUE_LEVEL] << '.';
+		ss << "You advanced to " << getSkillName(skill) << " level " << skills[skill].level << '.';
 		sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
 
-		g_creatureEvents->playerAdvance(this, skill, (skills[skill][SKILLVALUE_LEVEL] - 1), skills[skill][SKILLVALUE_LEVEL]);
+		g_creatureEvents->playerAdvance(this, skill, (skills[skill].level - 1), skills[skill].level);
 
 		sendUpdateSkills = true;
 		currReqTries = nextReqTries;
-		nextReqTries = vocation->getReqSkillTries(skill, skills[skill][SKILLVALUE_LEVEL] + 1);
+		nextReqTries = vocation->getReqSkillTries(skill, skills[skill].level + 1);
 		if (currReqTries >= nextReqTries) {
 			count = 0;
 			break;
 		}
 	}
 
-	skills[skill][SKILLVALUE_TRIES] += count;
+	skills[skill].tries += count;
 
 	uint32_t newPercent;
 	if (nextReqTries > currReqTries) {
-		newPercent = Player::getPercentLevel(skills[skill][SKILLVALUE_TRIES], nextReqTries);
+		newPercent = Player::getPercentLevel(skills[skill].tries, nextReqTries);
 	} else {
 		newPercent = 0;
 	}
 
-	if (skills[skill][SKILLVALUE_PERCENT] != newPercent) {
-		skills[skill][SKILLVALUE_PERCENT] = newPercent;
+	if (skills[skill].percent != newPercent) {
+		skills[skill].percent = newPercent;
 		sendUpdateSkills = true;
 	}
 
@@ -854,11 +825,13 @@ void Player::dropLoot(Container* corpse, Creature* _lastHitCreature)
 		} else {
 			for (int32_t i = CONST_SLOT_FIRST; i <= CONST_SLOT_LAST; ++i) {
 				Item* item = inventory[i];
-				if (item) {
-					if (playerSkull == SKULL_RED || playerSkull == SKULL_BLACK || uniform_random(1, (item->getContainer() ? 100 : 1000)) <= getDropPercent()) {
-						g_game.internalMoveItem(this, corpse, INDEX_WHEREEVER, item, item->getItemCount(), 0);
-						sendInventoryItem((slots_t)i, nullptr);
-					}
+				if (!item) {
+					continue;
+				}
+
+				if (playerSkull == SKULL_RED || playerSkull == SKULL_BLACK || uniform_random(1, (item->getContainer() ? 100 : 1000)) <= getDropPercent()) {
+					g_game.internalMoveItem(this, corpse, INDEX_WHEREEVER, item, item->getItemCount(), 0);
+					sendInventoryItem(static_cast<slots_t>(i), nullptr);
 				}
 			}
 		}
@@ -1255,7 +1228,7 @@ void Player::onRemoveTileItem(const Tile* tile, const Position& pos, const ItemT
 	}
 }
 
-void Player::onCreatureAppear(const Creature* creature, bool isLogin)
+void Player::onCreatureAppear(Creature* creature, bool isLogin)
 {
 	Creature::onCreatureAppear(creature, isLogin);
 
@@ -1264,7 +1237,7 @@ void Player::onCreatureAppear(const Creature* creature, bool isLogin)
 			Item* item = inventory[slot];
 			if (item) {
 				item->__startDecaying();
-				g_moveEvents->onPlayerEquip(this, item, (slots_t)slot, false);
+				g_moveEvents->onPlayerEquip(this, item, static_cast<slots_t>(slot), false);
 			}
 		}
 
@@ -1350,7 +1323,7 @@ void Player::onAttackedCreatureChangeZone(ZoneType_t zone)
 	}
 }
 
-void Player::onCreatureDisappear(const Creature* creature, uint32_t stackpos, bool isLogout)
+void Player::onCreatureDisappear(Creature* creature, uint32_t stackpos, bool isLogout)
 {
 	Creature::onCreatureDisappear(creature, stackpos, isLogout);
 
@@ -1438,7 +1411,7 @@ void Player::onWalk(Direction& dir)
 	setNextAction(OTSYS_TIME() + getStepDuration(dir));
 }
 
-void Player::onCreatureMove(const Creature* creature, const Tile* newTile, const Position& newPos,
+void Player::onCreatureMove(Creature* creature, const Tile* newTile, const Position& newPos,
                             const Tile* oldTile, const Position& oldPos, bool teleport)
 {
 	Creature::onCreatureMove(creature, newTile, newPos, oldTile, oldPos, teleport);
@@ -1580,19 +1553,21 @@ void Player::onRemoveInventoryItem(Item* item)
 
 void Player::checkTradeState(const Item* item)
 {
-	if (tradeItem && tradeState != TRADE_TRANSFER) {
-		if (tradeItem == item) {
-			g_game.internalCloseTrade(this);
-		} else {
-			const Container* container = dynamic_cast<const Container*>(item->getParent());
-			while (container) {
-				if (container == tradeItem) {
-					g_game.internalCloseTrade(this);
-					break;
-				}
+	if (!tradeItem || tradeState == TRADE_TRANSFER) {
+		return;
+	}
 
-				container = dynamic_cast<const Container*>(container->getParent());
+	if (tradeItem == item) {
+		g_game.internalCloseTrade(this);
+	} else {
+		const Container* container = dynamic_cast<const Container*>(item->getParent());
+		while (container) {
+			if (container == tradeItem) {
+				g_game.internalCloseTrade(this);
+				break;
 			}
+
+			container = dynamic_cast<const Container*>(container->getParent());
 		}
 	}
 }
@@ -1736,7 +1711,7 @@ void Player::drainMana(Creature* attacker, int32_t manaLoss)
 
 void Player::addManaSpent(uint64_t amount)
 {
-	if (amount == 0 || hasFlag(PlayerFlag_NotGainMana)) {
+	if (hasFlag(PlayerFlag_NotGainMana)) {
 		return;
 	}
 
@@ -1744,6 +1719,11 @@ void Player::addManaSpent(uint64_t amount)
 	uint64_t nextReqMana = vocation->getReqMana(magLevel + 1);
 	if (currReqMana >= nextReqMana) {
 		//player has reached max magic level
+		return;
+	}
+
+	g_events->eventPlayerOnGainSkillTries(this, SKILL_MAGLEVEL, amount);
+	if (amount == 0) {
 		return;
 	}
 
@@ -1770,16 +1750,14 @@ void Player::addManaSpent(uint64_t amount)
 
 	manaSpent += amount;
 
-	uint32_t newPercent;
-
+	uint8_t oldPercent = magLevelPercent;
 	if (nextReqMana > currReqMana) {
-		newPercent = Player::getPercentLevel(manaSpent, nextReqMana);
+		magLevelPercent = Player::getPercentLevel(manaSpent, nextReqMana);
 	} else {
-		newPercent = 0;
+		magLevelPercent = 0;
 	}
 
-	if (newPercent != magLevelPercent) {
-		magLevelPercent = newPercent;
+	if (oldPercent != magLevelPercent) {
 		sendUpdateStats = true;
 	}
 
@@ -1864,9 +1842,7 @@ void Player::addExperience(Creature* source, uint64_t exp, bool sendText/* = fal
 		mana = manaMax;
 
 		updateBaseSpeed();
-
-		int32_t newSpeed = getBaseSpeed();
-		setBaseSpeed(newSpeed);
+		setBaseSpeed(getBaseSpeed());
 
 		g_game.changeSpeed(this, 0);
 		g_game.addCreatureHealth(this);
@@ -1883,8 +1859,7 @@ void Player::addExperience(Creature* source, uint64_t exp, bool sendText/* = fal
 	}
 
 	if (nextLevelExp > currLevelExp) {
-		uint32_t newPercent = Player::getPercentLevel(experience - currLevelExp, nextLevelExp - currLevelExp);
-		levelPercent = newPercent;
+		levelPercent = Player::getPercentLevel(experience - currLevelExp, nextLevelExp - currLevelExp);
 	} else {
 		levelPercent = 0;
 	}
@@ -1934,7 +1909,7 @@ void Player::removeExperience(uint64_t exp, bool sendText/* = false*/)
 		--level;
 		healthMax = std::max<int32_t>(0, healthMax - vocation->getHPGain());
 		manaMax = std::max<int32_t>(0, manaMax - vocation->getManaGain());
-		capacity = std::max<double>(0.00, capacity - vocation->getCapGain());
+		capacity = std::max<int32_t>(0, capacity - vocation->getCapGain());
 		currLevelExp = Player::getExpForLevel(level);
 	}
 
@@ -1943,9 +1918,7 @@ void Player::removeExperience(uint64_t exp, bool sendText/* = false*/)
 		mana = manaMax;
 
 		updateBaseSpeed();
-
-		int32_t newSpeed = getBaseSpeed();
-		setBaseSpeed(newSpeed);
+		setBaseSpeed(getBaseSpeed());
 
 		g_game.changeSpeed(this, 0);
 		g_game.addCreatureHealth(this);
@@ -1968,13 +1941,13 @@ void Player::removeExperience(uint64_t exp, bool sendText/* = false*/)
 	sendStats();
 }
 
-uint32_t Player::getPercentLevel(uint64_t count, uint64_t nextLevelCount)
+uint8_t Player::getPercentLevel(uint64_t count, uint64_t nextLevelCount)
 {
 	if (nextLevelCount == 0) {
 		return 0;
 	}
 
-	uint32_t result = (count * 100) / nextLevelCount;
+	uint8_t result = (count * 100) / nextLevelCount;
 	if (result > 100) {
 		return 0;
 	}
@@ -1987,7 +1960,7 @@ void Player::onBlockHit()
 		--shieldBlockCount;
 
 		if (hasShield()) {
-			addSkillAdvance(SKILL_SHIELD, g_config.getNumber(ConfigManager::RATE_SKILL));
+			addSkillAdvance(SKILL_SHIELD, 1);
 		}
 	}
 }
@@ -2052,7 +2025,7 @@ BlockType_t Player::blockHit(Creature* attacker, CombatType_t combatType, int32_
 
 	if (damage > 0) {
 		for (int32_t slot = CONST_SLOT_FIRST; slot <= CONST_SLOT_LAST; ++slot) {
-			if (!isItemAbilityEnabled((slots_t)slot)) {
+			if (!isItemAbilityEnabled(static_cast<slots_t>(slot))) {
 				continue;
 			}
 
@@ -2134,7 +2107,7 @@ void Player::death(Creature* _lastHitCreature)
 				}
 
 				if (sumLevels > level) {
-					double reduce = level / (double)sumLevels;
+					double reduce = level / static_cast<double>(sumLevels);
 					unfairFightReduction = std::max<uint8_t>(20, std::floor((reduce * 100) + 0.5));
 				}
 			}
@@ -2153,7 +2126,7 @@ void Player::death(Creature* _lastHitCreature)
 
 		double deathLossPercent = getLostPercent() * (unfairFightReduction / 100.);
 
-		lostMana = (uint64_t)(sumMana * deathLossPercent);
+		lostMana = static_cast<uint64_t>(sumMana * deathLossPercent);
 
 		while (lostMana > manaSpent && magLevel > 0) {
 			lostMana -= manaSpent;
@@ -2162,8 +2135,8 @@ void Player::death(Creature* _lastHitCreature)
 		}
 
 		manaSpent -= lostMana;
-		uint64_t nextReqMana = vocation->getReqMana(magLevel + 1);
 
+		uint64_t nextReqMana = vocation->getReqMana(magLevel + 1);
 		if (nextReqMana > vocation->getReqMana(magLevel)) {
 			magLevelPercent = Player::getPercentLevel(manaSpent, nextReqMana);
 		} else {
@@ -2171,35 +2144,35 @@ void Player::death(Creature* _lastHitCreature)
 		}
 
 		//Skill loss
-		for (int16_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) { //for each skill
-			uint32_t sumSkillTries = 0;
-			for (uint32_t c = 11; c <= skills[i][SKILLVALUE_LEVEL]; ++c) { //sum up all required tries for all skill levels
+		for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) { //for each skill
+			uint64_t sumSkillTries = 0;
+			for (uint16_t c = 11; c <= skills[i].level; ++c) { //sum up all required tries for all skill levels
 				sumSkillTries += vocation->getReqSkillTries(i, c);
 			}
 
-			sumSkillTries += skills[i][SKILLVALUE_TRIES];
+			sumSkillTries += skills[i].tries;
 
-			uint32_t lostSkillTries = (uint32_t)(sumSkillTries * deathLossPercent);
-			while (lostSkillTries > skills[i][SKILLVALUE_TRIES]) {
-				lostSkillTries -= skills[i][SKILLVALUE_TRIES];
+			uint32_t lostSkillTries = static_cast<uint32_t>(sumSkillTries * deathLossPercent);
+			while (lostSkillTries > skills[i].tries) {
+				lostSkillTries -= skills[i].tries;
 
-				if (skills[i][SKILLVALUE_LEVEL] <= 10) {
-					skills[i][SKILLVALUE_LEVEL] = 10;
-					skills[i][SKILLVALUE_TRIES] = 0;
+				if (skills[i].level <= 10) {
+					skills[i].level = 10;
+					skills[i].tries = 0;
 					lostSkillTries = 0;
 					break;
 				}
 
-				skills[i][SKILLVALUE_TRIES] = vocation->getReqSkillTries(i, skills[i][SKILLVALUE_LEVEL]);
-				skills[i][SKILLVALUE_LEVEL]--;
+				skills[i].tries = vocation->getReqSkillTries(i, skills[i].level);
+				skills[i].level--;
 			}
 
-			skills[i][SKILLVALUE_TRIES] = std::max<int32_t>(0, skills[i][SKILLVALUE_TRIES] - lostSkillTries);
-			skills[i][SKILLVALUE_PERCENT] = Player::getPercentLevel(skills[i][SKILLVALUE_TRIES], vocation->getReqSkillTries(i, skills[i][SKILLVALUE_LEVEL]));
+			skills[i].tries = std::max<int32_t>(0, skills[i].tries - lostSkillTries);
+			skills[i].percent = Player::getPercentLevel(skills[i].tries, vocation->getReqSkillTries(i, skills[i].level));
 		}
 
 		//Level loss
-		uint64_t expLoss = (uint64_t)(experience * deathLossPercent);
+		uint64_t expLoss = static_cast<uint64_t>(experience * deathLossPercent);
 		g_events->eventPlayerOnLoseExperience(this, expLoss);
 
 		if (expLoss != 0) {
@@ -2213,7 +2186,7 @@ void Player::death(Creature* _lastHitCreature)
 				--level;
 				healthMax = std::max<int32_t>(0, healthMax - vocation->getHPGain());
 				manaMax = std::max<int32_t>(0, manaMax - vocation->getManaGain());
-				capacity = std::max<double>(0.00, capacity - vocation->getCapGain());
+				capacity = std::max<int32_t>(0, capacity - vocation->getCapGain());
 			}
 
 			if (oldLevel != level) {
@@ -2496,11 +2469,9 @@ bool Player::hasCapacity(const Item* item, uint32_t count) const
 		return true;
 	}
 
-	double itemWeight;
+	uint32_t itemWeight = item->getContainer() != nullptr ? item->getWeight() : item->getBaseWeight();
 	if (item->isStackable()) {
-		itemWeight = Item::items[item->getID()].weight * count;
-	} else {
-		itemWeight = item->getWeight();
+		itemWeight *= count;
 	}
 	return itemWeight <= getFreeCapacity();
 }
@@ -2537,7 +2508,11 @@ ReturnValue Player::__queryAdd(int32_t index, const Thing* thing, uint32_t count
 	} else if (slotPosition & SLOTP_TWO_HAND) {
 		ret = RETURNVALUE_PUTTHISOBJECTINBOTHHANDS;
 	} else if ((slotPosition & SLOTP_RIGHT) || (slotPosition & SLOTP_LEFT)) {
-		ret = RETURNVALUE_PUTTHISOBJECTINYOURHAND;
+		if (!g_config.getBoolean(ConfigManager::CLASSIC_EQUIPMENT_SLOTS)) {
+			ret = RETURNVALUE_CANNOTBEDRESSED;
+		} else {
+			ret = RETURNVALUE_PUTTHISOBJECTINYOURHAND;
+		}
 	}
 
 	switch (index) {
@@ -2571,8 +2546,22 @@ ReturnValue Player::__queryAdd(int32_t index, const Thing* thing, uint32_t count
 
 		case CONST_SLOT_RIGHT: {
 			if (slotPosition & SLOTP_RIGHT) {
-				//check if we already carry an item in the other hand
-				if (slotPosition & SLOTP_TWO_HAND) {
+				if (!g_config.getBoolean(ConfigManager::CLASSIC_EQUIPMENT_SLOTS)) {
+					if (item->getWeaponType() != WEAPON_SHIELD) {
+						ret = RETURNVALUE_CANNOTBEDRESSED;
+					} else {
+						const Item* leftItem = inventory[CONST_SLOT_LEFT];
+						if (leftItem) {
+							if ((leftItem->getSlotPosition() | slotPosition) & SLOTP_TWO_HAND) {
+								ret = RETURNVALUE_BOTHHANDSNEEDTOBEFREE;
+							} else {
+								ret = RETURNVALUE_NOERROR;
+							}
+						} else {
+							ret = RETURNVALUE_NOERROR;
+						}
+					}
+				} else if (slotPosition & SLOTP_TWO_HAND) {
 					if (inventory[CONST_SLOT_LEFT] && inventory[CONST_SLOT_LEFT] != item) {
 						ret = RETURNVALUE_BOTHHANDSNEEDTOBEFREE;
 					} else {
@@ -2604,8 +2593,15 @@ ReturnValue Player::__queryAdd(int32_t index, const Thing* thing, uint32_t count
 
 		case CONST_SLOT_LEFT: {
 			if (slotPosition & SLOTP_LEFT) {
-				//check if we already carry an item in the other hand
-				if (slotPosition & SLOTP_TWO_HAND) {
+				if (!g_config.getBoolean(ConfigManager::CLASSIC_EQUIPMENT_SLOTS)) {
+					if (!item->isWeapon() || item->getWeaponType() == WEAPON_SHIELD) {
+						ret = RETURNVALUE_CANNOTBEDRESSED;
+					} else if (inventory[CONST_SLOT_RIGHT] && (slotPosition & SLOTP_TWO_HAND)) {
+						ret = RETURNVALUE_BOTHHANDSNEEDTOBEFREE;
+					} else {
+						ret = RETURNVALUE_NOERROR;
+					}
+				} else if (slotPosition & SLOTP_TWO_HAND) {
 					if (inventory[CONST_SLOT_RIGHT] && inventory[CONST_SLOT_RIGHT] != item) {
 						ret = RETURNVALUE_BOTHHANDSNEEDTOBEFREE;
 					} else {
@@ -2657,7 +2653,7 @@ ReturnValue Player::__queryAdd(int32_t index, const Thing* thing, uint32_t count
 		}
 
 		case CONST_SLOT_AMMO: {
-			if (slotPosition & SLOTP_AMMO) {
+			if ((slotPosition & SLOTP_AMMO) || g_config.getBoolean(ConfigManager::CLASSIC_EQUIPMENT_SLOTS)) {
 				ret = RETURNVALUE_NOERROR;
 			}
 			break;
@@ -2675,7 +2671,7 @@ ReturnValue Player::__queryAdd(int32_t index, const Thing* thing, uint32_t count
 
 	if (ret == RETURNVALUE_NOERROR || ret == RETURNVALUE_NOTENOUGHROOM) {
 		//need an exchange with source?
-		const Item* inventoryItem = getInventoryItem((slots_t)index);
+		const Item* inventoryItem = getInventoryItem(static_cast<slots_t>(index));
 		if (inventoryItem && (!inventoryItem->isStackable() || inventoryItem->getID() != item->getID())) {
 			return RETURNVALUE_NEEDEXCHANGE;
 		}
@@ -2685,7 +2681,7 @@ ReturnValue Player::__queryAdd(int32_t index, const Thing* thing, uint32_t count
 			return RETURNVALUE_NOTENOUGHCAPACITY;
 		}
 
-		if (!g_moveEvents->onPlayerEquip(const_cast<Player*>(this), const_cast<Item*>(item), (slots_t)index, true)) {
+		if (!g_moveEvents->onPlayerEquip(const_cast<Player*>(this), const_cast<Item*>(item), static_cast<slots_t>(index), true)) {
 			return RETURNVALUE_CANNOTBEDRESSED;
 		}
 	}
@@ -2931,7 +2927,7 @@ void Player::__addThing(int32_t index, Thing* thing)
 	inventory[index] = item;
 
 	//send to client
-	sendInventoryItem((slots_t)index, item);
+	sendInventoryItem(static_cast<slots_t>(index), item);
 }
 
 void Player::__updateThing(Thing* thing, uint16_t itemId, uint32_t count)
@@ -2950,7 +2946,7 @@ void Player::__updateThing(Thing* thing, uint16_t itemId, uint32_t count)
 	item->setSubType(count);
 
 	//send to client
-	sendInventoryItem((slots_t)index, item);
+	sendInventoryItem(static_cast<slots_t>(index), item);
 
 	//event methods
 	onUpdateInventoryItem(item, item);
@@ -2962,7 +2958,7 @@ void Player::__replaceThing(uint32_t index, Thing* thing)
 		return /*RETURNVALUE_NOTPOSSIBLE*/;
 	}
 
-	Item* oldItem = getInventoryItem((slots_t)index);
+	Item* oldItem = getInventoryItem(static_cast<slots_t>(index));
 	if (!oldItem) {
 		return /*RETURNVALUE_NOTPOSSIBLE*/;
 	}
@@ -2973,7 +2969,7 @@ void Player::__replaceThing(uint32_t index, Thing* thing)
 	}
 
 	//send to client
-	sendInventoryItem((slots_t)index, item);
+	sendInventoryItem(static_cast<slots_t>(index), item);
 
 	//event methods
 	onUpdateInventoryItem(oldItem, item);
@@ -2998,7 +2994,7 @@ void Player::__removeThing(Thing* thing, uint32_t count)
 	if (item->isStackable()) {
 		if (count == item->getItemCount()) {
 			//send change to client
-			sendInventoryItem((slots_t)index, nullptr);
+			sendInventoryItem(static_cast<slots_t>(index), nullptr);
 
 			//event methods
 			onRemoveInventoryItem(item);
@@ -3006,18 +3002,18 @@ void Player::__removeThing(Thing* thing, uint32_t count)
 			item->setParent(nullptr);
 			inventory[index] = nullptr;
 		} else {
-			uint8_t newCount = (uint8_t)std::max<int32_t>(0, item->getItemCount() - count);
+			uint8_t newCount = static_cast<uint8_t>(std::max<int32_t>(0, item->getItemCount() - count));
 			item->setItemCount(newCount);
 
 			//send change to client
-			sendInventoryItem((slots_t)index, item);
+			sendInventoryItem(static_cast<slots_t>(index), item);
 
 			//event methods
 			onUpdateInventoryItem(item, item);
 		}
 	} else {
 		//send change to client
-		sendInventoryItem((slots_t)index, nullptr);
+		sendInventoryItem(static_cast<slots_t>(index), nullptr);
 
 		//event methods
 		onRemoveInventoryItem(item);
@@ -3151,7 +3147,7 @@ void Player::postAddNotification(Thing* thing, const Cylinder* oldParent, int32_
 {
 	if (link == LINK_OWNER) {
 		//calling movement scripts
-		g_moveEvents->onPlayerEquip(this, thing->getItem(), (slots_t)index, false);
+		g_moveEvents->onPlayerEquip(this, thing->getItem(), static_cast<slots_t>(index), false);
 	}
 
 	bool requireListUpdate = true;
@@ -3205,7 +3201,7 @@ void Player::postRemoveNotification(Thing* thing, const Cylinder* newParent, int
 {
 	if (link == LINK_OWNER) {
 		//calling movement scripts
-		g_moveEvents->onPlayerDeEquip(this, thing->getItem(), (slots_t)index, isCompleteRemoval);
+		g_moveEvents->onPlayerDeEquip(this, thing->getItem(), static_cast<slots_t>(index), isCompleteRemoval);
 	}
 
 	bool requireListUpdate = true;
@@ -3379,11 +3375,6 @@ void Player::getPathSearchParams(const Creature* creature, FindPathParams& fpp) 
 	fpp.fullPathSearch = true;
 }
 
-void Player::onAttacking(uint32_t interval)
-{
-	Creature::onAttacking(interval);
-}
-
 void Player::doAttacking(uint32_t)
 {
 	if (lastAttack == 0) {
@@ -3424,7 +3415,7 @@ uint64_t Player::getGainedExperience(Creature* attacker) const
 {
 	if (g_config.getBoolean(ConfigManager::EXPERIENCE_FROM_PLAYERS)) {
 		Player* attackerPlayer = attacker->getPlayer();
-		if (attackerPlayer && attackerPlayer != this && skillLoss && std::abs((int32_t)(attackerPlayer->getLevel() - level)) <= g_config.getNumber(ConfigManager::EXP_FROM_PLAYERS_LEVEL_RANGE)) {
+		if (attackerPlayer && attackerPlayer != this && skillLoss && std::abs(static_cast<int32_t>(attackerPlayer->getLevel() - level)) <= g_config.getNumber(ConfigManager::EXP_FROM_PLAYERS_LEVEL_RANGE)) {
 			return std::max<uint64_t>(0, std::floor(getLostExperience() * getDamageRatio(attacker) * 0.75));
 		}
 	}
@@ -3576,7 +3567,6 @@ void Player::onEndCondition(ConditionType_t type)
 
 		if (getSkull() != SKULL_RED && getSkull() != SKULL_BLACK) {
 			setSkull(SKULL_NONE);
-			g_game.updatePlayerSkull(this);
 		}
 	}
 
@@ -3589,7 +3579,7 @@ void Player::onCombatRemoveCondition(Condition* condition)
 	if (condition->getId() > 0) {
 		//Means the condition is from an item, id == slot
 		if (g_game.getWorldType() == WORLD_TYPE_PVP_ENFORCED) {
-			Item* item = getInventoryItem((slots_t)condition->getId());
+			Item* item = getInventoryItem(static_cast<slots_t>(condition->getId()));
 			if (item) {
 				//25% chance to destroy the item
 				if (25 >= uniform_random(1, 100)) {
@@ -3646,7 +3636,6 @@ void Player::onAttackedCreature(Creature* target)
 
 				if (targetPlayer->getSkull() == SKULL_NONE && getSkull() == SKULL_NONE) {
 					setSkull(SKULL_WHITE);
-					g_game.updatePlayerSkull(this);
 				}
 
 				if (getSkull() == SKULL_NONE) {
@@ -3761,6 +3750,10 @@ void Player::gainExperience(uint64_t gainExp, Creature* source)
 		return;
 	}
 
+	if (source && !source->getPlayer()) {
+		useStamina();
+	}
+
 	uint64_t oldExperience = experience;
 	addExperience(source, gainExp, true, true, true);
 
@@ -3781,16 +3774,10 @@ void Player::onGainExperience(uint64_t gainExp, Creature* target)
 		return;
 	}
 
-	if (target) {
-		if (gainExp > 0 && target->getMonster()) {
-			useStamina();
-		}
-
-		if (!target->getPlayer() && party && party->isSharedExperienceActive() && party->isSharedExperienceEnabled()) {
-			party->shareExperience(gainExp, target);
-			//We will get a share of the experience through the sharing mechanism
-			return;
-		}
+	if (target && !target->getPlayer() && party && party->isSharedExperienceActive() && party->isSharedExperienceEnabled()) {
+		party->shareExperience(gainExp, target);
+		//We will get a share of the experience through the sharing mechanism
+		return;
 	}
 
 	Creature::onGainExperience(gainExp, target);
@@ -3978,13 +3965,14 @@ Skulls_t Player::getSkull() const
 	return skull;
 }
 
-Skulls_t Player::getSkullClient(const Player* player) const
+Skulls_t Player::getSkullClient(const Creature* creature) const
 {
-	if (!player || g_game.getWorldType() != WORLD_TYPE_PVP) {
+	if (!creature || g_game.getWorldType() != WORLD_TYPE_PVP) {
 		return SKULL_NONE;
 	}
 
-	if (player->getSkull() == SKULL_NONE) {
+	const Player* player = creature->getPlayer();
+	if (player && player->getSkull() == SKULL_NONE) {
 		if (isInWar(player)) {
 			return SKULL_GREEN;
 		}
@@ -4001,7 +3989,7 @@ Skulls_t Player::getSkullClient(const Player* player) const
 			return SKULL_GREEN;
 		}
 	}
-	return player->getSkull();
+	return Creature::getSkullClient(creature);
 }
 
 bool Player::hasAttacked(const Player* attacked) const
@@ -4042,12 +4030,10 @@ void Player::addUnjustifiedDead(const Player* attacked)
 	skullTicks += g_config.getNumber(ConfigManager::FRAG_TIME);
 
 	if (getSkull() != SKULL_BLACK) {
-		if (g_config.getNumber(ConfigManager::KILLS_TO_BLACK) != 0 && skullTicks > (g_config.getNumber(ConfigManager::KILLS_TO_BLACK) - 1) * g_config.getNumber(ConfigManager::FRAG_TIME)) {
+		if (g_config.getNumber(ConfigManager::KILLS_TO_BLACK) != 0 && skullTicks > (g_config.getNumber(ConfigManager::KILLS_TO_BLACK) - 1) * static_cast<int64_t>(g_config.getNumber(ConfigManager::FRAG_TIME))) {
 			setSkull(SKULL_BLACK);
-			g_game.updatePlayerSkull(this);
-		} else if (getSkull() != SKULL_RED && g_config.getNumber(ConfigManager::KILLS_TO_RED) != 0 && skullTicks > (g_config.getNumber(ConfigManager::KILLS_TO_RED) - 1) * g_config.getNumber(ConfigManager::FRAG_TIME)) {
+		} else if (getSkull() != SKULL_RED && g_config.getNumber(ConfigManager::KILLS_TO_RED) != 0 && skullTicks > (g_config.getNumber(ConfigManager::KILLS_TO_RED) - 1) * static_cast<int64_t>(g_config.getNumber(ConfigManager::FRAG_TIME))) {
 			setSkull(SKULL_RED);
-			g_game.updatePlayerSkull(this);
 		}
 	}
 }
@@ -4063,13 +4049,12 @@ void Player::checkSkullTicks(int32_t ticks)
 
 	if ((skull == SKULL_RED || skull == SKULL_BLACK) && skullTicks < 1000 && !hasCondition(CONDITION_INFIGHT)) {
 		setSkull(SKULL_NONE);
-		g_game.updatePlayerSkull(this);
 	}
 }
 
 bool Player::isPromoted() const
 {
-	int32_t promotedVocation = g_vocations.getPromotedVocation(vocation->getId());
+	uint16_t promotedVocation = g_vocations.getPromotedVocation(vocation->getId());
 	return promotedVocation == 0 && vocation->getId() != promotedVocation;
 }
 
@@ -4085,14 +4070,14 @@ double Player::getLostPercent() const
 			lossPercent -= 3;
 		}
 
-		lossPercent -= (int32_t)bitset.count();
-		return std::max<int32_t>(0, lossPercent) / (double)100;
+		lossPercent -= static_cast<int32_t>(bitset.count());
+		return std::max<int32_t>(0, lossPercent) / 100.;
 	} else {
 		double lossPercent;
 
 		if (level >= 25) {
 			double tmpLevel = level + (levelPercent / 100.);
-			lossPercent = (double)((tmpLevel + 50) * 50 * ((tmpLevel * tmpLevel) - (5 * tmpLevel) + 8)) / experience;
+			lossPercent = static_cast<double>((tmpLevel + 50) * 50 * ((tmpLevel * tmpLevel) - (5 * tmpLevel) + 8)) / experience;
 		} else {
 			lossPercent = 10;
 		}
@@ -4101,7 +4086,7 @@ double Player::getLostPercent() const
 			lossPercent *= 0.7;
 		}
 
-		return lossPercent * pow(0.92, (int32_t)bitset.count()) / 100;
+		return lossPercent * pow(0.92, static_cast<int32_t>(bitset.count())) / 100;
 	}
 }
 
@@ -4485,9 +4470,9 @@ void Player::dismount()
 	defaultOutfit.lookMount = 0;
 }
 
-bool Player::addOfflineTrainingTries(skills_t skill, int32_t tries)
+bool Player::addOfflineTrainingTries(skills_t skill, uint64_t tries)
 {
-	if (tries <= 0 || skill == SKILL_LEVEL) {
+	if (tries == 0 || skill == SKILL_LEVEL) {
 		return false;
 	}
 
@@ -4504,9 +4489,9 @@ bool Player::addOfflineTrainingTries(skills_t skill, int32_t tries)
 		}
 
 		oldSkillValue = magLevel;
-		oldPercentToNextLevel = (long double)(manaSpent * 100) / nextReqMana;
+		oldPercentToNextLevel = static_cast<long double>(manaSpent * 100) / nextReqMana;
 
-		tries *= g_config.getNumber(ConfigManager::RATE_MAGIC);
+		g_events->eventPlayerOnGainSkillTries(this, SKILL_MAGLEVEL, tries);
 		uint32_t currMagLevel = magLevel;
 
 		while ((manaSpent + tries) >= nextReqMana) {
@@ -4535,11 +4520,10 @@ bool Player::addOfflineTrainingTries(skills_t skill, int32_t tries)
 			sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
 		}
 
-		uint32_t newPercent;
-
+		uint8_t newPercent;
 		if (nextReqMana > currReqMana) {
 			newPercent = Player::getPercentLevel(manaSpent, nextReqMana);
-			newPercentToNextLevel = (long double)(manaSpent * 100) / nextReqMana;
+			newPercentToNextLevel = static_cast<long double>(manaSpent * 100) / nextReqMana;
 		} else {
 			newPercent = 0;
 			newPercentToNextLevel = 0;
@@ -4552,31 +4536,30 @@ bool Player::addOfflineTrainingTries(skills_t skill, int32_t tries)
 
 		newSkillValue = magLevel;
 	} else {
-		uint64_t currReqTries = vocation->getReqSkillTries(skill, skills[skill][SKILLVALUE_LEVEL]);
-		uint64_t nextReqTries = vocation->getReqSkillTries(skill, skills[skill][SKILLVALUE_LEVEL] + 1);
-
+		uint64_t currReqTries = vocation->getReqSkillTries(skill, skills[skill].level);
+		uint64_t nextReqTries = vocation->getReqSkillTries(skill, skills[skill].level + 1);
 		if (currReqTries >= nextReqTries) {
 			return false;
 		}
 
-		oldSkillValue = skills[skill][SKILLVALUE_LEVEL];
-		oldPercentToNextLevel = (long double)(skills[skill][SKILLVALUE_TRIES] * 100) / nextReqTries;
+		oldSkillValue = skills[skill].level;
+		oldPercentToNextLevel = static_cast<long double>(skills[skill].tries * 100) / nextReqTries;
 
-		tries *= g_config.getNumber(ConfigManager::RATE_SKILL);
-		uint32_t currSkillLevel = skills[skill][SKILLVALUE_LEVEL];
+		g_events->eventPlayerOnGainSkillTries(this, skill, tries);
+		uint32_t currSkillLevel = skills[skill].level;
 
-		while ((skills[skill][SKILLVALUE_TRIES] + tries) >= nextReqTries) {
-			tries -= nextReqTries - skills[skill][SKILLVALUE_TRIES];
+		while ((skills[skill].tries + tries) >= nextReqTries) {
+			tries -= nextReqTries - skills[skill].tries;
 
-			skills[skill][SKILLVALUE_LEVEL]++;
-			skills[skill][SKILLVALUE_TRIES] = 0;
-			skills[skill][SKILLVALUE_PERCENT] = 0;
+			skills[skill].level++;
+			skills[skill].tries = 0;
+			skills[skill].percent = 0;
 
-			g_creatureEvents->playerAdvance(this, skill, (skills[skill][SKILLVALUE_LEVEL] - 1), skills[skill][SKILLVALUE_LEVEL]);
+			g_creatureEvents->playerAdvance(this, skill, (skills[skill].level - 1), skills[skill].level);
 
 			sendUpdate = true;
 			currReqTries = nextReqTries;
-			nextReqTries = vocation->getReqSkillTries(skill, skills[skill][SKILLVALUE_LEVEL] + 1);
+			nextReqTries = vocation->getReqSkillTries(skill, skills[skill].level + 1);
 
 			if (currReqTries >= nextReqTries) {
 				tries = 0;
@@ -4584,30 +4567,29 @@ bool Player::addOfflineTrainingTries(skills_t skill, int32_t tries)
 			}
 		}
 
-		skills[skill][SKILLVALUE_TRIES] += tries;
+		skills[skill].tries += tries;
 
-		if (currSkillLevel != skills[skill][SKILLVALUE_LEVEL]) {
+		if (currSkillLevel != skills[skill].level) {
 			std::ostringstream ss;
-			ss << "You advanced to " << getSkillName(skill) << " level " << skills[skill][SKILLVALUE_LEVEL] << '.';
+			ss << "You advanced to " << getSkillName(skill) << " level " << skills[skill].level << '.';
 			sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
 		}
 
-		uint32_t newPercent;
-
+		uint8_t newPercent;
 		if (nextReqTries > currReqTries) {
-			newPercent = Player::getPercentLevel(skills[skill][SKILLVALUE_TRIES], nextReqTries);
-			newPercentToNextLevel = (long double)(skills[skill][SKILLVALUE_TRIES] * 100) / nextReqTries;
+			newPercent = Player::getPercentLevel(skills[skill].tries, nextReqTries);
+			newPercentToNextLevel = static_cast<long double>(skills[skill].tries * 100) / nextReqTries;
 		} else {
 			newPercent = 0;
 			newPercentToNextLevel = 0;
 		}
 
-		if (skills[skill][SKILLVALUE_PERCENT] != newPercent) {
-			skills[skill][SKILLVALUE_PERCENT] = newPercent;
+		if (skills[skill].percent != newPercent) {
+			skills[skill].percent = newPercent;
 			sendUpdate = true;
 		}
 
-		newSkillValue = skills[skill][SKILLVALUE_LEVEL];
+		newSkillValue = skills[skill].level;
 	}
 
 	std::ostringstream ss;

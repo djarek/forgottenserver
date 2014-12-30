@@ -54,7 +54,6 @@ class AStarNodes
 {
 	public:
 		AStarNodes(uint32_t x, uint32_t y);
-		~AStarNodes() {}
 
 		AStarNode* createOpenNode(AStarNode* parent, uint32_t x, uint32_t y, int_fast32_t f);
 		AStarNode* getBestNode();
@@ -85,6 +84,10 @@ struct Floor {
 	Floor() : tiles() {}
 	~Floor();
 
+	// non-copyable
+	Floor(const Floor&) = delete;
+	Floor& operator=(const Floor&) = delete;
+
 	Tile* tiles[FLOOR_SIZE][FLOOR_SIZE];
 };
 
@@ -97,11 +100,16 @@ class QTreeNode
 		QTreeNode();
 		virtual ~QTreeNode();
 
+		// non-copyable
+		QTreeNode(const QTreeNode&) = delete;
+		QTreeNode& operator=(const QTreeNode&) = delete;
+
 		bool isLeaf() const {
 			return m_isLeaf;
 		}
+
 		QTreeLeafNode* getLeaf(uint32_t x, uint32_t y);
-		static QTreeLeafNode* getLeafStatic(QTreeNode* root, uint32_t x, uint32_t y);
+		inline static const QTreeLeafNode* getLeafStatic(const QTreeNode* root, uint32_t x, uint32_t y);
 		QTreeLeafNode* createLeaf(uint32_t x, uint32_t y, uint32_t level);
 
 	protected:
@@ -112,22 +120,19 @@ class QTreeNode
 		friend class Map;
 };
 
-class QTreeLeafNode : public QTreeNode
+class QTreeLeafNode final : public QTreeNode
 {
 	public:
 		QTreeLeafNode();
-		virtual ~QTreeLeafNode();
+		~QTreeLeafNode();
+
+		// non-copyable
+		QTreeLeafNode(const QTreeLeafNode&) = delete;
+		QTreeLeafNode& operator=(const QTreeLeafNode&) = delete;
 
 		Floor* createFloor(uint32_t z);
 		Floor* getFloor(uint16_t z) const {
 			return m_array[z];
-		}
-
-		QTreeLeafNode* stepSouth() {
-			return m_leafS;
-		}
-		QTreeLeafNode* stepEast() {
-			return m_leafE;
 		}
 
 		void addCreature(Creature* c);
@@ -154,7 +159,6 @@ class Map
 {
 	public:
 		Map();
-		~Map();
 
 		static const int32_t maxViewportX = 11; //min value: maxClientViewportX + 1
 		static const int32_t maxViewportY = 11; //min value: maxClientViewportY + 1
@@ -169,7 +173,6 @@ class Map
 
 		/**
 		  * Save a map.
-		  * \param identifier file/database to save to
 		  * \returns true if the map was saved successfully
 		  */
 		bool saveMap();
@@ -178,26 +181,21 @@ class Map
 		  * Get a single tile.
 		  * \returns A pointer to that tile.
 		  */
-		Tile* getTile(int32_t x, int32_t y, int32_t z);
+		Tile* getTile(uint16_t x, uint16_t y, uint8_t z) const;
 
 		uint32_t clean() const;
 
-		QTreeLeafNode* getLeaf(uint16_t x, uint16_t y) {
-			return root.getLeaf(x, y);
-		}
-
 		/**
 		  * Set a single tile.
-		  * \param a tile to set for the position
 		  */
-		void setTile(int32_t _x, int32_t _y, int32_t _z, Tile* newTile);
+		void setTile(uint16_t x, uint16_t y, uint8_t z, Tile* newTile);
 		void setTile(const Position& pos, Tile* newTile) {
 			setTile(pos.x, pos.y, pos.z, newTile);
 		}
 
 		/**
 		  * Place a creature on the map
-		  * \param pos The position to place the creature
+		  * \param centerPos The position to place the creature
 		  * \param creature Creature to place on the map
 		  * \param extendedPos If true, the creature will in first-hand be placed 2 tiles away
 		  * \param forceLogin If true, placing the creature will not fail becase of obstacles (creatures/chests)
@@ -233,10 +231,10 @@ class Map
 		bool isSightClear(const Position& fromPos, const Position& toPos, bool floorCheck) const;
 		bool checkSightLine(const Position& fromPos, const Position& toPos) const;
 
-		const Tile* canWalkTo(const Creature& creature, const Position& pos);
+		const Tile* canWalkTo(const Creature& creature, const Position& pos) const;
 
 		bool getPathMatching(const Creature& creature, std::list<Direction>& dirList,
-		                     const FrozenPathingConditionCall& pathCondition, const FindPathParams& fpp);
+		                     const FrozenPathingConditionCall& pathCondition, const FindPathParams& fpp) const;
 
 		std::map<std::string, Position> waypoints;
 
@@ -255,7 +253,7 @@ class Map
 		void getSpectatorsInternal(SpectatorVec& list, const Position& centerPos,
 		                           int32_t minRangeX, int32_t maxRangeX,
 		                           int32_t minRangeY, int32_t maxRangeY,
-		                           int32_t minRangeZ, int32_t maxRangeZ, bool onlyPlayers);
+		                           int32_t minRangeZ, int32_t maxRangeZ, bool onlyPlayers) const;
 
 		// Use this when a custom spectator vector is needed, this support many
 		// more parameters than the heavily cached version below.

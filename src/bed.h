@@ -25,38 +25,31 @@
 class House;
 class Player;
 
-class BedItem : public Item
+class BedItem final : public Item
 {
 	public:
 		BedItem(uint16_t id);
-		virtual ~BedItem() {}
 
-		virtual BedItem* getBed() {
+		BedItem* getBed() final {
 			return this;
 		}
-		virtual const BedItem* getBed() const {
+		const BedItem* getBed() const final {
 			return this;
 		}
 
-		virtual Attr_ReadValue readAttr(AttrTypes_t attr, PropStream& propStream);
-		virtual bool serializeAttr(PropWriteStream& propWriteStream) const;
+		Attr_ReadValue readAttr(AttrTypes_t attr, PropStream& propStream) final;
+		bool serializeAttr(PropWriteStream& propWriteStream) const final;
 
-		virtual bool canRemove() const {
-			return (house == nullptr);
+		bool canRemove() const final {
+			return house == nullptr;
 		}
 
 		uint32_t getSleeper() const {
 			return sleeperGUID;
 		}
-		void setSleeper(uint32_t guid) {
-			sleeperGUID = guid;
-		}
 
 		uint64_t getSleepStart() const {
 			return sleepStart;
-		}
-		void setSleepStart(uint64_t now) {
-			sleepStart = now;
 		}
 
 		House* getHouse() const {
@@ -72,7 +65,7 @@ class BedItem : public Item
 		bool sleep(Player* player);
 		void wakeUp(Player* player);
 
-		BedItem* getNextBedItem();
+		BedItem* getNextBedItem() const;
 
 	protected:
 		void updateAppearance(const Player* player);

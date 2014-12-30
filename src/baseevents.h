@@ -27,7 +27,7 @@ class Event
 	public:
 		Event(LuaScriptInterface* _interface);
 		Event(const Event* copy);
-		virtual ~Event();
+		virtual ~Event() = default;
 
 		virtual bool configureEvent(const pugi::xml_node& node) = 0;
 
@@ -35,12 +35,12 @@ class Event
 		bool loadScript(const std::string& scriptFile);
 		virtual bool loadFunction(const std::string& functionName);
 
-		virtual bool isScripted() {
+		bool isScripted() {
 			return m_scripted;
 		}
 
 	protected:
-		virtual std::string getScriptEventName() = 0;
+		virtual std::string getScriptEventName() const = 0;
 
 		bool m_scripted;
 		int32_t m_scriptId;
@@ -51,7 +51,7 @@ class BaseEvents
 {
 	public:
 		BaseEvents();
-		virtual ~BaseEvents();
+		virtual ~BaseEvents() = default;
 
 		bool loadFromXml();
 		bool reload();
@@ -61,7 +61,7 @@ class BaseEvents
 
 	protected:
 		virtual LuaScriptInterface& getScriptInterface() = 0;
-		virtual std::string getScriptBaseName() = 0;
+		virtual std::string getScriptBaseName() const = 0;
 		virtual Event* getEvent(const std::string& nodeName) = 0;
 		virtual bool registerEvent(Event* event, const pugi::xml_node& node) = 0;
 		virtual void clear() = 0;
@@ -73,7 +73,6 @@ class CallBack
 {
 	public:
 		CallBack();
-		virtual ~CallBack();
 
 		bool loadCallBack(LuaScriptInterface* _interface, const std::string& name);
 

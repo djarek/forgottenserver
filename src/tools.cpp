@@ -27,7 +27,7 @@
 
 extern ConfigManager g_config;
 
-static inline uint32_t circularShift(int bits, uint32_t value)
+inline static uint32_t circularShift(int bits, uint32_t value)
 {
 	return (value << bits) | (value >> (32 - bits));
 }
@@ -86,15 +86,16 @@ std::string transformToSHA1(const std::string& input)
 	uint8_t messageBlock[64];
 	size_t index = 0;
 
-	uint32_t length_low = input.length() << 3;
-#if ULONG_MAX > 0xFFFFFFFFUL
-	uint32_t length_high = input.length() >> 32;
-#else
+	uint32_t length_low = 0;
 	uint32_t length_high = 0;
-#endif
-
 	for (char ch : input) {
 		messageBlock[index++] = ch;
+
+		length_low += 8;
+		if (length_low == 0) {
+			length_high++;
+		}
+
 		if (index == 64) {
 			processSHA1MessageBlock(messageBlock, H);
 			index = 0;
@@ -426,6 +427,11 @@ struct AmmoActionNames {
 	AmmoAction_t ammoAction;
 };
 
+struct SkullNames {
+	const char* name;
+	Skulls_t skull;
+};
+
 MagicEffectNames magicEffectNames[] = {
 	{"redspark",		CONST_ME_DRAWBLOOD},
 	{"bluebubble",		CONST_ME_LOSEENERGY},
@@ -605,6 +611,16 @@ AmmoActionNames ammoActionNames[] = {
 	{"removecount",		AMMOACTION_REMOVECOUNT}
 };
 
+SkullNames skullNames[] = {
+	{"none",	SKULL_NONE},
+	{"yellow",	SKULL_YELLOW},
+	{"green",	SKULL_GREEN},
+	{"white",	SKULL_WHITE},
+	{"red",		SKULL_RED},
+	{"black",	SKULL_BLACK},
+	{"orange",	SKULL_ORANGE},
+};
+
 MagicEffectClasses getMagicEffect(const std::string& strValue)
 {
 	for (size_t i = 0; i < sizeof(magicEffectNames) / sizeof(MagicEffectNames); ++i) {
@@ -663,6 +679,16 @@ AmmoAction_t getAmmoAction(const std::string& strValue)
 		}
 	}
 	return AMMOACTION_NONE;
+}
+
+Skulls_t getSkullType(const std::string& strValue)
+{
+	for (size_t i = 0, size = sizeof(skullNames) / sizeof(SkullNames); i < size; ++i) {
+		if (strcasecmp(strValue.c_str(), skullNames[i].name) == 0) {
+			return skullNames[i].skull;
+		}
+	}
+	return SKULL_NONE;
 }
 
 std::string getSkillName(uint8_t skillid)
@@ -816,31 +842,26 @@ CombatType_t indexToCombatType(uint32_t v)
 	if (v == 0) {
 		return COMBAT_FIRST;
 	}
-
-	return (CombatType_t)(1 << (v - 1));
+	return static_cast<CombatType_t>(1 << (v - 1));
 }
 
 uint8_t serverFluidToClient(uint8_t serverFluid)
 {
 	uint8_t size = sizeof(clientToServerFluidMap) / sizeof(uint8_t);
-
 	for (uint8_t i = 0; i < size; ++i) {
 		if (clientToServerFluidMap[i] == serverFluid) {
 			return i;
 		}
 	}
-
 	return 0;
 }
 
 uint8_t clientFluidToServer(uint8_t clientFluid)
 {
-	uint8_t size = sizeof(clientToServerFluidMap) / sizeof(int8_t);
-
+	uint8_t size = sizeof(clientToServerFluidMap) / sizeof(uint8_t);
 	if (clientFluid >= size) {
 		return 0;
 	}
-
 	return clientToServerFluidMap[clientFluid];
 }
 
@@ -858,6 +879,26 @@ itemAttrTypes stringToItemAttribute(const std::string& str)
 		return ITEM_ATTRIBUTE_DATE;
 	} else if (str == "writer") {
 		return ITEM_ATTRIBUTE_WRITER;
+	} else if (str == "name") {
+		return ITEM_ATTRIBUTE_NAME;
+	} else if (str == "article") {
+		return ITEM_ATTRIBUTE_ARTICLE;
+	} else if (str == "pluralname") {
+		return ITEM_ATTRIBUTE_PLURALNAME;
+	} else if (str == "weight") {
+		return ITEM_ATTRIBUTE_WEIGHT;
+	} else if (str == "attack") {
+		return ITEM_ATTRIBUTE_ATTACK;
+	} else if (str == "defense") {
+		return ITEM_ATTRIBUTE_DEFENSE;
+	} else if (str == "extradefense") {
+		return ITEM_ATTRIBUTE_EXTRADEFENSE;
+	} else if (str == "armor") {
+		return ITEM_ATTRIBUTE_ARMOR;
+	} else if (str == "hitchance") {
+		return ITEM_ATTRIBUTE_HITCHANCE;
+	} else if (str == "shootrange") {
+		return ITEM_ATTRIBUTE_SHOOTRANGE;
 	} else if (str == "owner") {
 		return ITEM_ATTRIBUTE_OWNER;
 	} else if (str == "duration") {

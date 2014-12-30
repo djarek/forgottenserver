@@ -38,30 +38,29 @@ Attr_ReadValue BedItem::readAttr(AttrTypes_t attr, PropStream& propStream)
 {
 	switch (attr) {
 		case ATTR_SLEEPERGUID: {
-			uint32_t _guid;
-			if (!propStream.GET_ULONG(_guid)) {
+			uint32_t guid;
+			if (!propStream.read<uint32_t>(guid)) {
 				return ATTR_READ_ERROR;
 			}
 
-			if (_guid != 0) {
-				std::string name;
-				if (IOLoginData::getNameByGuid(_guid, name)) {
+			if (guid != 0) {
+				std::string name = IOLoginData::getNameByGuid(guid);
+				if (!name.empty()) {
 					setSpecialDescription(name + " is sleeping there.");
-					g_game.setBedSleeper(this, _guid);
+					g_game.setBedSleeper(this, guid);
+					sleeperGUID = guid;
 				}
 			}
-
-			sleeperGUID = _guid;
 			return ATTR_READ_CONTINUE;
 		}
 
 		case ATTR_SLEEPSTART: {
 			uint32_t sleep_start;
-			if (!propStream.GET_ULONG(sleep_start)) {
+			if (!propStream.read<uint32_t>(sleep_start)) {
 				return ATTR_READ_ERROR;
 			}
 
-			sleepStart = (uint64_t)sleep_start;
+			sleepStart = static_cast<uint64_t>(sleep_start);
 			return ATTR_READ_CONTINUE;
 		}
 
@@ -74,19 +73,19 @@ Attr_ReadValue BedItem::readAttr(AttrTypes_t attr, PropStream& propStream)
 bool BedItem::serializeAttr(PropWriteStream& propWriteStream) const
 {
 	if (sleeperGUID != 0) {
-		propWriteStream.ADD_UCHAR(ATTR_SLEEPERGUID);
-		propWriteStream.ADD_ULONG(sleeperGUID);
+		propWriteStream.write<uint8_t>(ATTR_SLEEPERGUID);
+		propWriteStream.write<uint32_t>(sleeperGUID);
 	}
 
 	if (sleepStart != 0) {
-		propWriteStream.ADD_UCHAR(ATTR_SLEEPSTART);
-		propWriteStream.ADD_ULONG((uint32_t)sleepStart);
+		propWriteStream.write<uint8_t>(ATTR_SLEEPSTART);
+		// FIXME: should be stored as 64-bit, but we need to retain backwards compatibility
+		propWriteStream.write<uint32_t>(static_cast<uint32_t>(sleepStart));
 	}
-
 	return true;
 }
 
-BedItem* BedItem::getNextBedItem()
+BedItem* BedItem::getNextBedItem() const
 {
 	Direction dir = Item::items[id].bedPartnerDir;
 	Position targetPos = getNextPosition(dir, getPosition());
@@ -270,14 +269,14 @@ void BedItem::internalSetSleeper(const Player* player)
 {
 	std::string desc_str = player->getName() + " is sleeping there.";
 
-	setSleeper(player->getGUID());
-	setSleepStart(time(nullptr));
+	sleeperGUID = player->getGUID();
+	sleepStart = time(nullptr);
 	setSpecialDescription(desc_str);
 }
 
 void BedItem::internalRemoveSleeper()
 {
-	setSleeper(0);
-	setSleepStart(0);
+	sleeperGUID = 0;
+	sleepStart = 0;
 	setSpecialDescription("Nobody is sleeping there.");
 }

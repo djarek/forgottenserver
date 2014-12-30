@@ -24,22 +24,20 @@
 Scheduler::Scheduler()
 {
 	m_lastEventId = 0;
-	m_threadState = STATE_TERMINATED;
+	m_threadState = THREAD_STATE_TERMINATED;
 }
 
 void Scheduler::start()
 {
-	m_threadState = STATE_RUNNING;
+	m_threadState = THREAD_STATE_RUNNING;
 	m_thread = std::thread(&Scheduler::schedulerThread, this);
 }
 
 void Scheduler::schedulerThread()
 {
 	std::unique_lock<std::mutex> eventLockUnique(m_eventLock, std::defer_lock);
-	while (m_threadState != STATE_TERMINATED) {
-		SchedulerTask* task = nullptr;
+	while (m_threadState != THREAD_STATE_TERMINATED) {
 		std::cv_status ret = std::cv_status::no_timeout;
-		bool runTask = false;
 
 		eventLockUnique.lock();
 		if (m_eventList.empty()) {
@@ -49,33 +47,25 @@ void Scheduler::schedulerThread()
 		}
 
 		// the mutex is locked again now...
-		if (ret == std::cv_status::timeout && m_threadState != STATE_TERMINATED) {
+		if (ret == std::cv_status::timeout && m_threadState != THREAD_STATE_TERMINATED) {
 			// ok we had a timeout, so there has to be an event we have to execute...
-			task = m_eventList.top();
+			SchedulerTask* task = m_eventList.top();
 			m_eventList.pop();
 
 			// check if the event was stopped
 			auto it = m_eventIds.find(task->getEventId());
-			if (it != m_eventIds.end()) {
-				// was not stopped so we should run it
-				runTask = true;
-				m_eventIds.erase(it);
-			}
-		}
-
-		eventLockUnique.unlock();
-
-		// add task to dispatcher
-		if (task) {
-			// if it was not stopped
-			if (runTask) {
-				// Expiration has another meaning for dispatcher tasks, reset it
-				task->setDontExpire();
-				g_dispatcher.addTask(task);
-			} else {
-				// was stopped, have to be deleted here
+			if (it == m_eventIds.end()) {
+				eventLockUnique.unlock();
 				delete task;
+				continue;
 			}
+			m_eventIds.erase(it);
+			eventLockUnique.unlock();
+
+			task->setDontExpire();
+			g_dispatcher.addTask(task, true);
+		} else {
+			eventLockUnique.unlock();
 		}
 	}
 }
@@ -85,7 +75,7 @@ uint32_t Scheduler::addEvent(SchedulerTask* task)
 	bool do_signal = false;
 	m_eventLock.lock();
 
-	if (Scheduler::m_threadState == Scheduler::STATE_RUNNING) {
+	if (Scheduler::m_threadState == THREAD_STATE_RUNNING) {
 		// check if the event has a valid id
 		if (task->getEventId() == 0) {
 			// if not generate one
@@ -108,7 +98,6 @@ uint32_t Scheduler::addEvent(SchedulerTask* task)
 	} else {
 		m_eventLock.unlock();
 		delete task;
-		task = nullptr;
 		return 0;
 	}
 
@@ -142,14 +131,14 @@ bool Scheduler::stopEvent(uint32_t eventid)
 void Scheduler::stop()
 {
 	m_eventLock.lock();
-	m_threadState = Scheduler::STATE_CLOSING;
+	m_threadState = THREAD_STATE_CLOSING;
 	m_eventLock.unlock();
 }
 
 void Scheduler::shutdown()
 {
 	m_eventLock.lock();
-	m_threadState = Scheduler::STATE_TERMINATED;
+	m_threadState = THREAD_STATE_TERMINATED;
 
 	//this list should already be empty
 	while (!m_eventList.empty()) {

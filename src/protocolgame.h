@@ -72,11 +72,6 @@ class ProtocolGame : public Protocol
 		}
 
 		ProtocolGame(Connection_ptr connection);
-		virtual ~ProtocolGame();
-
-		virtual int32_t getProtocolId() {
-			return 0x0A;
-		}
 
 		void login(const std::string& name, uint32_t accnumber, OperatingSystem_t operatingSystem);
 		void logout(bool displayEffect, bool forced);
@@ -185,8 +180,8 @@ class ProtocolGame : public Protocol
 
 		void writeToOutputBuffer(const NetworkMessage& msg, bool broadcast = true);
 
-		virtual void releaseProtocol();
-		virtual void deleteProtocolTask();
+		void releaseProtocol();
+		void deleteProtocolTask();
 
 		void checkCreatureAsKnown(uint32_t id, bool& known, uint32_t& removedKnown);
 
@@ -195,9 +190,9 @@ class ProtocolGame : public Protocol
 		bool canSee(const Position& pos) const;
 
 		// we have all the parse methods
-		virtual void parsePacket(NetworkMessage& msg);
-		virtual void onRecvFirstMessage(NetworkMessage& msg);
-		virtual void onConnect();
+		void parsePacket(NetworkMessage& msg);
+		void onRecvFirstMessage(NetworkMessage& msg);
+		void onConnect();
 
 		//Parse methods
 		void parseAutoWalk(NetworkMessage& msg);

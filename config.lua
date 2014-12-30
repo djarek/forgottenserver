@@ -59,7 +59,7 @@ maxMarketOffersAtATimePerPlayer = 100
 
 -- MySQL
 mysqlHost = "127.0.0.1"
-mysqlUser = "forgottenserver"
+mysqlUser = "root"
 mysqlPass = ""
 mysqlDatabase = "forgottenserver"
 mysqlPort = 3306
@@ -71,8 +71,10 @@ freePremium = "no"
 kickIdlePlayerAfterMinutes = 15
 maxMessageBuffer = 4
 emoteSpells = "no"
+classicEquipmentSlots = "no"
 enableLiveCasting = "yes"
 liveCastPort = 7173
+
 -- Rates
 -- NOTE: rateExp is not used if you have enabled stages in data/XML/stages.xml
 rateExp = 5

@@ -20,6 +20,12 @@
 #ifndef FS_ENUMS_H_003445999FEE4A67BCECBE918B0124CE
 #define FS_ENUMS_H_003445999FEE4A67BCECBE918B0124CE
 
+enum ThreadState {
+	THREAD_STATE_RUNNING,
+	THREAD_STATE_CLOSING,
+	THREAD_STATE_TERMINATED
+};
+
 enum itemAttrTypes {
 	ITEM_ATTRIBUTE_NONE = 0,
 	ITEM_ATTRIBUTE_ACTIONID = 1,
@@ -28,6 +34,16 @@ enum itemAttrTypes {
 	ITEM_ATTRIBUTE_TEXT = 8,
 	ITEM_ATTRIBUTE_DATE = 16,
 	ITEM_ATTRIBUTE_WRITER = 32,
+	ITEM_ATTRIBUTE_NAME = 64,
+	ITEM_ATTRIBUTE_ARTICLE = 128,
+	ITEM_ATTRIBUTE_PLURALNAME = 256,
+	ITEM_ATTRIBUTE_WEIGHT = 512,
+	ITEM_ATTRIBUTE_ATTACK = 1024,
+	ITEM_ATTRIBUTE_DEFENSE = 2048,
+	ITEM_ATTRIBUTE_EXTRADEFENSE = 4096,
+	ITEM_ATTRIBUTE_ARMOR = 8192,
+	ITEM_ATTRIBUTE_HITCHANCE = 16384,
+	ITEM_ATTRIBUTE_SHOOTRANGE = 32768,
 	ITEM_ATTRIBUTE_OWNER = 65536,
 	ITEM_ATTRIBUTE_DURATION = 131072,
 	ITEM_ATTRIBUTE_DECAYSTATE = 262144,
@@ -218,7 +234,7 @@ enum BlockType_t : uint8_t {
 	BLOCK_IMMUNITY
 };
 
-enum skills_t {
+enum skills_t : uint8_t {
 	SKILL_FIRST = 0,
 	SKILL_FIST = SKILL_FIRST,
 	SKILL_CLUB = 1,
@@ -301,16 +317,8 @@ enum PlayerSex_t : uint8_t {
 	PLAYERSEX_LAST = PLAYERSEX_MALE
 };
 
-enum Vocation_t : uint8_t {
-	VOCATION_NONE = 0,
-	VOCATION_SORCERER = 1,
-	VOCATION_DRUID = 2,
-	VOCATION_PALADIN = 3,
-	VOCATION_KNIGHT = 4,
-	VOCATION_MASTERSORCERER = 5,
-	VOCATION_ELDERDRUID = 6,
-	VOCATION_ROYALPALADIN = 7,
-	VOCATION_ELITEKNIGHT = 8
+enum Vocation_t : uint16_t {
+	VOCATION_NONE = 0
 };
 
 enum ReturnValue {
@@ -435,13 +443,13 @@ struct Outfit_t {
 };
 
 struct LightInfo {
-	uint32_t level;
-	uint32_t color;
+	uint8_t level;
+	uint8_t color;
 	LightInfo() {
 		level = 0;
 		color = 0;
-	};
-	LightInfo(uint32_t _level, uint32_t _color) {
+	}
+	LightInfo(uint8_t _level, uint8_t _color) {
 		level = _level;
 		color = _color;
 	}
@@ -475,7 +483,7 @@ struct MarketOffer {
 };
 
 struct MarketOfferEx {
-	MarketOfferEx() {}
+	MarketOfferEx() = default;
 	MarketOfferEx(MarketOfferEx&& other) :
 		id(other.id), playerId(other.playerId), timestamp(other.timestamp), price(other.price),
 		amount(other.amount), counter(other.counter), itemId(other.itemId), type(other.type),
@@ -490,14 +498,6 @@ struct MarketOfferEx {
 	uint16_t itemId;
 	MarketAction_t type;
 	std::string playerName;
-};
-
-struct ExpiredMarketOffer {
-	uint32_t id;
-	uint32_t price;
-	uint16_t amount;
-	uint16_t itemId;
-	uint32_t playerId;
 };
 
 struct HistoryMarketOffer {
@@ -560,7 +560,6 @@ struct CombatDamage
 };
 
 typedef std::list<MarketOffer> MarketOfferList;
-typedef std::list<ExpiredMarketOffer> ExpiredMarketOfferList;
 typedef std::list<HistoryMarketOffer> HistoryMarketOfferList;
 typedef std::list<ShopInfo> ShopInfoList;
 

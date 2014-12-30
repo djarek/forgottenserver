@@ -107,8 +107,8 @@ void ProtocolCast::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	msg.SkipBytes(1); // gamemaster flag
-	std::string accountName = msg.GetString();
-	std::string characterName = msg.GetString();
+	msg.GetString(); //skip account name
+	std::string characterName = msg.GetString(); //Skip characterName
 	std::string password = msg.GetString();
 
 	uint32_t timeStamp = msg.get<uint32_t>();
@@ -126,9 +126,7 @@ void ProtocolCast::onRecvFirstMessage(NetworkMessage& msg)
 		return;
 	}
 
-	if (accountName.empty()) {
-		g_dispatcher.addTask(createTask(std::bind(&ProtocolCast::login, this, characterName, password)));
-	}
+	g_dispatcher.addTask(createTask(std::bind(&ProtocolCast::login, this, characterName, password)));
 	
 #undef dispatchDisconnectClient
 
@@ -199,8 +197,7 @@ void ProtocolCast::login(const std::string& liveCastName, const std::string& liv
 		syncChatChannels();
 
 		liveCasterProtocol->addSpectator(this);
-	}
-	else
+	} else
 		disconnectSpectator("Live cast no longer exists. Please relogin to refresh the list.");
 }
 
@@ -257,12 +254,11 @@ void ProtocolCast::parseSpectatorSay(NetworkMessage& msg)
 
 	uint16_t channelId = 0;
 
-	if (type == TALKTYPE_CHANNEL_Y) {
-		channelId = msg.get<uint16_t>();
-	} else {
+	if (type != TALKTYPE_CHANNEL_Y) {
 		return;
 	}
 
+	channelId = msg.get<uint16_t>();
 	const std::string text = msg.GetString();
 
 	if (text.length() > 255 || channelId != CHANNEL_CAST || !client) {

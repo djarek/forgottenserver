@@ -45,7 +45,9 @@
 #include "house.h"
 #include "databasemanager.h"
 #include "scheduler.h"
+#include "databasetasks.h"
 
+DatabaseTasks g_databaseTasks;
 Dispatcher g_dispatcher;
 Scheduler g_scheduler;
 
@@ -107,6 +109,7 @@ int main(int argc, char* argv[])
 					std::bind(&Game::shutdown, &g_game)
 				));
 				g_scheduler.stop();
+				g_databaseTasks.stop();
 				g_dispatcher.stop();
 			}));
 			ExitThread(0);
@@ -114,18 +117,22 @@ int main(int argc, char* argv[])
 #endif
 		servicer.run();
 		g_scheduler.join();
+		g_databaseTasks.join();
 		g_dispatcher.join();
 	} else {
 		std::cout << ">> No services running. The server is NOT online." << std::endl;
 		g_dispatcher.addTask(createTask([]() {
 			g_dispatcher.addTask(createTask([]() {
 				g_scheduler.shutdown();
+				g_databaseTasks.shutdown();
 				g_dispatcher.shutdown();
 			}));
 			g_scheduler.stop();
+			g_databaseTasks.stop();
 			g_dispatcher.stop();
 		}));
 		g_scheduler.join();
+		g_databaseTasks.join();
 		g_dispatcher.join();
 	}
 	return 0;
@@ -136,12 +143,13 @@ void mainLoader(int, char*[], ServiceManager* services)
 	//dispatcher thread
 	g_game.setGameState(GAME_STATE_STARTUP);
 
-	srand((unsigned int)OTSYS_TIME());
+	srand(static_cast<unsigned int>(OTSYS_TIME()));
 #ifdef _WIN32
 	SetConsoleTitle(STATUS_SERVER_NAME);
 #endif
 	std::cout << STATUS_SERVER_NAME << " - Version " << STATUS_SERVER_VERSION << std::endl;
-	std::cout << "Compilied on " << __DATE__ << ' ' << __TIME__ << " for arch ";
+	std::cout << "Compiled with: " << BOOST_COMPILER << std::endl;
+	std::cout << "Compiled on " << __DATE__ << ' ' << __TIME__ << " for arch ";
 
 #if defined(__amd64__) || defined(_M_X64)
 	std::cout << "x64" << std::endl;
@@ -200,6 +208,7 @@ void mainLoader(int, char*[], ServiceManager* services)
 		startupErrorMessage("The database you have specified in config.lua is empty, please import the schema.sql to your database.");
 		return;
 	}
+	g_databaseTasks.start();
 
 	DatabaseManager::updateDatabase();
 
@@ -280,12 +289,11 @@ void mainLoader(int, char*[], ServiceManager* services)
 	// OT protocols
 	services->add<ProtocolStatus>(g_config.getNumber(ConfigManager::STATUS_PORT));
 
-	// Legacy protocols
-	services->add<ProtocolOldLogin>(g_config.getNumber(ConfigManager::LOGIN_PORT));
-	services->add<ProtocolOldGame>(g_config.getNumber(ConfigManager::LOGIN_PORT));
+	// Legacy login protocol
+	services->add<ProtocolOld>(g_config.getNumber(ConfigManager::LOGIN_PORT));
 
 	Houses::getInstance().payHouses();
-	g_game.checkExpiredMarketOffers();
+	IOMarket::checkExpiredOffers();
 	IOMarket::getInstance()->updateStatistics();
 
 	std::cout << ">> Loaded all modules, server starting up..." << std::endl;

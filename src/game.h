@@ -84,6 +84,10 @@ class Game
 		Game();
 		~Game();
 
+		// non-copyable
+		Game(const Game&) = delete;
+		Game& operator=(const Game&) = delete;
+
 		void start(ServiceManager* servicer);
 
 		void forceAddCondition(uint32_t creatureId, Condition* condition);
@@ -107,9 +111,9 @@ class Game
 			return worldType;
 		}
 
-		Cylinder* internalGetCylinder(Player* player, const Position& pos);
+		Cylinder* internalGetCylinder(Player* player, const Position& pos) const;
 		Thing* internalGetThing(Player* player, const Position& pos, int32_t index,
-		                        uint32_t spriteId = 0, stackPosType_t type = STACKPOS_NORMAL);
+		                        uint32_t spriteId = 0, stackPosType_t type = STACKPOS_NORMAL) const;
 		static void internalGetPosition(Item* item, Position& pos, uint8_t& stackpos);
 
 		static std::string getTradeErrorDescription(ReturnValue ret, Item* item);
@@ -118,19 +122,17 @@ class Game
 		  * Get a single tile of the map.
 		  * \returns A pointer to the tile
 		*/
-		Tile* getTile(int32_t x, int32_t y, int32_t z);
-		Tile* getTile(const Position& pos);
+		inline Tile* getTile(uint16_t x, uint16_t y, uint8_t z) const {
+			return map.getTile(x, y, z);
+		}
+		inline Tile* getTile(const Position& pos) const {
+			return map.getTile(pos.x, pos.y, pos.z);
+		}
 
 		/**
 		  * Set a single tile of the map, position is read from this tile
 		*/
 		void setTile(Tile* newTile);
-
-		/**
-		  * Get a leaf of the map.
-		  * \returns A pointer to a leaf
-		*/
-		QTreeLeafNode* getLeaf(uint32_t x, uint32_t y);
 
 		/**
 		  * Returns a creature based on the unique creature identifier
@@ -183,7 +185,6 @@ class Game
 
 		/**
 		  * Returns a player based on guid
-		  * \param guid
 		  * \returns A Pointer to the player
 		  */
 		Player* getPlayerByGUID(const uint32_t& guid);
@@ -216,7 +217,7 @@ class Game
 		  * \param creature Creature to place on the map
 		  * \param pos The position to place the creature
 		  * \param extendedPos If true, the creature will in first-hand be placed 2 tiles away
-		  * \param forced If true, placing the creature will not fail because of obstacles (creatures/items)
+		  * \param force If true, placing the creature will not fail because of obstacles (creatures/items)
 		  */
 		bool placeCreature(Creature* creature, const Position& pos, bool extendedPos = false, bool force = false);
 
@@ -283,7 +284,7 @@ class Game
 		  * \returns A pointer to the item to an item and nullptr if not found
 		  */
 		Item* findItemOfType(Cylinder* cylinder, uint16_t itemId,
-		                     bool depthSearch = true, int32_t subType = -1);
+		                     bool depthSearch = true, int32_t subType = -1) const;
 
 		/**
 		  * Remove/Add item(s) with a monetary value
@@ -426,7 +427,6 @@ class Game
 		void playerCreateMarketOffer(uint32_t playerId, uint8_t type, uint16_t spriteId, uint16_t amount, uint32_t price, bool anonymous);
 		void playerCancelMarketOffer(uint32_t playerId, uint32_t timestamp, uint16_t counter);
 		void playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16_t counter, uint16_t amount);
-		void checkExpiredMarketOffers();
 
 		void parsePlayerExtendedOpcode(uint32_t playerId, uint8_t opcode, const std::string& buffer);
 
@@ -445,13 +445,11 @@ class Game
 		void internalCreatureChangeOutfit(Creature* creature, const Outfit_t& oufit);
 		void internalCreatureChangeVisible(Creature* creature, bool visible);
 		void changeLight(const Creature* creature);
-		void updatePlayerSkull(Player* player);
+		void updateCreatureSkull(const Creature* player);
 		void updatePlayerShield(Player* player);
 		void updatePlayerHelpers(const Player& player);
 		void updateCreatureType(Creature* creature);
 		void updateCreatureWalkthrough(const Creature* creature);
-
-		void sendPublicSquare(Player* sender, SquareColor_t color);
 
 		GameState_t getGameState() const;
 		void setGameState(GameState_t newState);
@@ -464,8 +462,7 @@ class Game
 		void checkCreatures(size_t index);
 		void checkLight();
 
-		bool combatBlockHit(CombatType_t combatType, Creature* attacker, Creature* target,
-		                    int32_t& healthChange, bool checkDefense, bool checkArmor, bool field);
+		bool combatBlockHit(CombatDamage& damage, Creature* attacker, Creature* target, bool checkDefense, bool checkArmor, bool field);
 
 		void combatGetTypeInfo(CombatType_t combatType, Creature* target, TextColor_t& color, uint8_t& effect);
 
@@ -573,12 +570,6 @@ class Game
 		Commands commands;
 		Groups groups;
 
-		struct GameEvent {
-			int64_t tick;
-			int type;
-			void* data;
-		};
-
 		static const int32_t LIGHT_LEVEL_DAY = 250;
 		static const int32_t LIGHT_LEVEL_NIGHT = 40;
 		static const int32_t SUNSET = 1305;
@@ -588,7 +579,7 @@ class Game
 		WorldType_t worldType;
 
 		LightState_t lightState;
-		int32_t lightLevel;
+		uint8_t lightLevel;
 		int32_t lightHour;
 		int32_t lightHourDelta;
 

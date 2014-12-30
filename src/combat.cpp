@@ -28,10 +28,12 @@
 #include "tools.h"
 #include "weapons.h"
 #include "configmanager.h"
+#include "events.h"
 
 extern Game g_game;
 extern Weapons* g_weapons;
 extern ConfigManager g_config;
+extern Events* g_events;
 
 Combat::Combat() :
 	formulaType(COMBAT_FORMULA_UNDEFINED),
@@ -136,7 +138,7 @@ void Combat::getCombatArea(const Position& centerPos, const Position& targetPos,
 	if (area) {
 		area->getList(centerPos, targetPos, list);
 	} else {
-		Tile* tile = g_game.getTile(targetPos.x, targetPos.y, targetPos.z);
+		Tile* tile = g_game.getTile(targetPos);
 		if (!tile) {
 			tile = new StaticTile(targetPos.x, targetPos.y, targetPos.z);
 			g_game.setTile(tile);
@@ -224,7 +226,7 @@ bool Combat::isPlayerCombat(const Creature* target)
 	return false;
 }
 
-ReturnValue Combat::canTargetCreature(const Player* player, const Creature* target)
+ReturnValue Combat::canTargetCreature(Player* player, Creature* target)
 {
 	if (player == target) {
 		return RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER;
@@ -274,7 +276,7 @@ ReturnValue Combat::canTargetCreature(const Player* player, const Creature* targ
 	return Combat::canDoCombat(player, target);
 }
 
-ReturnValue Combat::canDoCombat(const Creature* caster, const Tile* tile, bool isAggressive)
+ReturnValue Combat::canDoCombat(Creature* caster, Tile* tile, bool isAggressive)
 {
 	if (tile->hasProperty(CONST_PROP_BLOCKPROJECTILE)) {
 		return RETURNVALUE_NOTENOUGHROOM;
@@ -291,7 +293,6 @@ ReturnValue Combat::canDoCombat(const Creature* caster, const Tile* tile, bool i
 	if (caster) {
 		const Position& casterPosition = caster->getPosition();
 		const Position& tilePosition = tile->getPosition();
-
 		if (casterPosition.z < tilePosition.z) {
 			return RETURNVALUE_FIRSTGODOWNSTAIRS;
 		} else if (casterPosition.z > tilePosition.z) {
@@ -310,26 +311,17 @@ ReturnValue Combat::canDoCombat(const Creature* caster, const Tile* tile, bool i
 		return RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE;
 	}
 
-	return RETURNVALUE_NOERROR;
+	return g_events->eventCreatureOnAreaCombat(caster, tile, isAggressive);
 }
 
 bool Combat::isInPvpZone(const Creature* attacker, const Creature* target)
 {
-	if (attacker->getZone() != ZONE_PVP) {
-		return false;
-	}
-
-	if (target->getZone() != ZONE_PVP) {
-		return false;
-	}
-
-	return true;
+	return attacker->getZone() == ZONE_PVP && target->getZone() == ZONE_PVP;
 }
 
 bool Combat::isProtected(const Player* attacker, const Player* target)
 {
 	uint32_t protectionLevel = g_config.getNumber(ConfigManager::PROTECTION_LEVEL);
-
 	if (target->getLevel() < protectionLevel || attacker->getLevel() < protectionLevel) {
 		return true;
 	}
@@ -345,7 +337,7 @@ bool Combat::isProtected(const Player* attacker, const Player* target)
 	return false;
 }
 
-ReturnValue Combat::canDoCombat(const Creature* attacker, const Creature* target)
+ReturnValue Combat::canDoCombat(Creature* attacker, Creature* target)
 {
 	if (attacker) {
 		if (const Player* targetPlayer = target->getPlayer()) {
@@ -364,7 +356,6 @@ ReturnValue Combat::canDoCombat(const Creature* attacker, const Creature* target
 
 				//nopvp-zone
 				const Tile* targetPlayerTile = targetPlayer->getTile();
-
 				if (targetPlayerTile->hasFlag(TILESTATE_NOPVPZONE)) {
 					return RETURNVALUE_ACTIONNOTPERMITTEDINANOPVPZONE;
 				} else if (attackerPlayer->getTile()->hasFlag(TILESTATE_NOPVPZONE) && !targetPlayerTile->hasFlag(TILESTATE_NOPVPZONE) && !targetPlayerTile->hasFlag(TILESTATE_PROTECTIONZONE)) {
@@ -425,8 +416,7 @@ ReturnValue Combat::canDoCombat(const Creature* attacker, const Creature* target
 			}
 		}
 	}
-
-	return RETURNVALUE_NOERROR;
+	return g_events->eventCreatureOnTargetCombat(attacker, target);
 }
 
 void Combat::setPlayerCombatValues(formulaType_t _type, double _mina, double _minb, double _maxa, double _maxb)
@@ -442,17 +432,17 @@ bool Combat::setParam(CombatParam_t param, uint32_t value)
 {
 	switch (param) {
 		case COMBAT_PARAM_TYPE: {
-			params.combatType = (CombatType_t)value;
+			params.combatType = static_cast<CombatType_t>(value);
 			return true;
 		}
 
 		case COMBAT_PARAM_EFFECT: {
-			params.impactEffect = (uint8_t)value;
+			params.impactEffect = static_cast<uint8_t>(value);
 			return true;
 		}
 
 		case COMBAT_PARAM_DISTANCEEFFECT: {
-			params.distanceEffect = (uint8_t)value;
+			params.distanceEffect = static_cast<uint8_t>(value);
 			return true;
 		}
 
@@ -482,7 +472,7 @@ bool Combat::setParam(CombatParam_t param, uint32_t value)
 		}
 
 		case COMBAT_PARAM_DISPEL: {
-			params.dispelType = (ConditionType_t)value;
+			params.dispelType = static_cast<ConditionType_t>(value);
 			return true;
 		}
 
@@ -546,16 +536,8 @@ CallBack* Combat::getCallback(CallBackParam_t key)
 bool Combat::CombatHealthFunc(Creature* caster, Creature* target, const CombatParams& params, void* data)
 {
 	CombatDamage damage = *reinterpret_cast<CombatDamage*>(data);
-
-	bool blockPrimary = g_game.combatBlockHit(damage.primary.type, caster, target, damage.primary.value, params.blockedByShield, params.blockedByArmor, params.itemId != 0);
-	bool blockSecondary = g_game.combatBlockHit(damage.secondary.type, caster, target, damage.secondary.value, false, false, params.itemId != 0);
-	if (blockPrimary) {
-		if (blockSecondary) {
-			return false;
-		}
-		damage.primary.value = 0;
-	} else if (blockSecondary) {
-		damage.secondary.value = 0;
+	if (g_game.combatBlockHit(damage, caster, target, params.blockedByShield, params.blockedByArmor, params.itemId != 0)) {
+		return false;
 	}
 
 	if ((damage.primary.value < 0 || damage.secondary.value < 0) && caster) {
@@ -631,20 +613,6 @@ void Combat::combatTileEffects(const SpectatorVec& list, Creature* caster, Tile*
 {
 	if (params.itemId != 0) {
 		uint32_t itemId = params.itemId;
-
-		Player* _caster;
-		if (caster) {
-			if (caster->getPlayer()) {
-				_caster = caster->getPlayer();
-			} else if (caster->isSummon()) {
-				_caster = caster->getMaster()->getPlayer();
-			} else {
-				_caster = nullptr;
-			}
-		} else {
-			_caster = nullptr;
-		}
-
 		switch (itemId) {
 			case ITEM_FIREFIELD_PERSISTENT_FULL:
 				itemId = ITEM_FIREFIELD_PVP_FULL;
@@ -678,22 +646,30 @@ void Combat::combatTileEffects(const SpectatorVec& list, Creature* caster, Tile*
 				break;
 		}
 
-		if (_caster) {
-			if (g_game.getWorldType() == WORLD_TYPE_NO_PVP || tile->hasFlag(TILESTATE_NOPVPZONE)) {
-				if (itemId == ITEM_FIREFIELD_PVP_FULL) {
-					itemId = ITEM_FIREFIELD_NOPVP;
-				} else if (itemId == ITEM_POISONFIELD_PVP) {
-					itemId = ITEM_POISONFIELD_NOPVP;
-				} else if (itemId == ITEM_ENERGYFIELD_PVP) {
-					itemId = ITEM_ENERGYFIELD_NOPVP;
+		if (caster) {
+			Player* casterPlayer;
+			if (caster->isSummon()) {
+				casterPlayer = caster->getMaster()->getPlayer();
+			} else {
+				casterPlayer = caster->getPlayer();
+			}
+
+			if (casterPlayer) {
+				if (g_game.getWorldType() == WORLD_TYPE_NO_PVP || tile->hasFlag(TILESTATE_NOPVPZONE)) {
+					if (itemId == ITEM_FIREFIELD_PVP_FULL) {
+						itemId = ITEM_FIREFIELD_NOPVP;
+					} else if (itemId == ITEM_POISONFIELD_PVP) {
+						itemId = ITEM_POISONFIELD_NOPVP;
+					} else if (itemId == ITEM_ENERGYFIELD_PVP) {
+						itemId = ITEM_ENERGYFIELD_NOPVP;
+					}
+				} else if (itemId == ITEM_FIREFIELD_PVP_FULL || itemId == ITEM_POISONFIELD_PVP || itemId == ITEM_ENERGYFIELD_PVP) {
+					casterPlayer->addInFightTicks(true);
 				}
-			} else if (itemId == ITEM_FIREFIELD_PVP_FULL || itemId == ITEM_POISONFIELD_PVP || itemId == ITEM_ENERGYFIELD_PVP) {
-				_caster->addInFightTicks(true);
 			}
 		}
 
 		Item* item = Item::CreateItem(itemId);
-
 		if (caster) {
 			item->setOwner(caster->getID());
 		}
@@ -974,7 +950,7 @@ void Combat::doCombatDefault(Creature* caster, Creature* target, const CombatPar
 
 void ValueCallback::getMinMaxValues(Player* player, CombatDamage& damage, bool useCharges) const
 {
-	//"onGetPlayerMinMaxValues"(...)
+	//onGetPlayerMinMaxValues(...)
 	if (!m_scriptInterface->reserveScriptEnv()) {
 		std::cout << "[Error - ValueCallback::getMinMaxValues] Call stack overflow" << std::endl;
 		return;
@@ -989,12 +965,14 @@ void ValueCallback::getMinMaxValues(Player* player, CombatDamage& damage, bool u
 	lua_State* L = m_scriptInterface->getLuaState();
 
 	m_scriptInterface->pushFunction(m_scriptId);
-	lua_pushnumber(L, player->getID());
+
+	LuaScriptInterface::pushUserdata<Player>(L, player);
+	LuaScriptInterface::setMetatable(L, -1, "Player");
 
 	int32_t parameters = 1;
 	switch (type) {
 		case COMBAT_FORMULA_LEVELMAGIC: {
-			//"onGetPlayerMinMaxValues"(cid, level, maglevel)
+			//onGetPlayerMinMaxValues(player, level, maglevel)
 			lua_pushnumber(L, player->getLevel());
 			lua_pushnumber(L, player->getMagicLevel());
 			parameters += 2;
@@ -1002,7 +980,7 @@ void ValueCallback::getMinMaxValues(Player* player, CombatDamage& damage, bool u
 		}
 
 		case COMBAT_FORMULA_SKILL: {
-			//"onGetPlayerMinMaxValues"(cid, attackSkill, attackValue, attackFactor)
+			//onGetPlayerMinMaxValues(player, attackSkill, attackValue, attackFactor)
 			Item* tool = player->getWeapon();
 			const Weapon* weapon = g_weapons->getWeapon(tool);
 
@@ -1056,7 +1034,7 @@ void ValueCallback::getMinMaxValues(Player* player, CombatDamage& damage, bool u
 
 void TileCallback::onTileCombat(Creature* creature, Tile* tile) const
 {
-	//"onTileCombat"(cid, pos)
+	//onTileCombat(creature, pos)
 	if (!m_scriptInterface->reserveScriptEnv()) {
 		std::cout << "[Error - TileCallback::onTileCombat] Call stack overflow" << std::endl;
 		return;
@@ -1070,15 +1048,13 @@ void TileCallback::onTileCombat(Creature* creature, Tile* tile) const
 
 	lua_State* L = m_scriptInterface->getLuaState();
 
-	uint32_t cid;
-	if (creature) {
-		cid = creature->getID();
-	} else {
-		cid = 0;
-	}
-
 	m_scriptInterface->pushFunction(m_scriptId);
-	lua_pushnumber(L, cid);
+	if (creature) {
+		LuaScriptInterface::pushUserdata<Creature>(L, creature);
+		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
+	} else {
+		lua_pushnil(L);
+	}
 	LuaScriptInterface::pushPosition(L, tile->getPosition());
 
 	m_scriptInterface->callFunction(2);
@@ -1088,7 +1064,7 @@ void TileCallback::onTileCombat(Creature* creature, Tile* tile) const
 
 void TargetCallback::onTargetCombat(Creature* creature, Creature* target) const
 {
-	//"onTargetCombat"(cid, target)
+	//onTargetCombat(creature, target)
 	if (!m_scriptInterface->reserveScriptEnv()) {
 		std::cout << "[Error - TargetCallback::onTargetCombat] Call stack overflow" << std::endl;
 		return;
@@ -1102,23 +1078,21 @@ void TargetCallback::onTargetCombat(Creature* creature, Creature* target) const
 
 	lua_State* L = m_scriptInterface->getLuaState();
 
-	uint32_t cid;
-	if (creature) {
-		cid = creature->getID();
-	} else {
-		cid = 0;
-	}
-
-	uint32_t targetCid;
-	if (target) {
-		targetCid = target->getID();
-	} else {
-		targetCid = 0;
-	}
-
 	m_scriptInterface->pushFunction(m_scriptId);
-	lua_pushnumber(L, cid);
-	lua_pushnumber(L, targetCid);
+
+	if (creature) {
+		LuaScriptInterface::pushUserdata<Creature>(L, creature);
+		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
+	} else {
+		lua_pushnil(L);
+	}
+
+	if (target) {
+		LuaScriptInterface::pushUserdata<Creature>(L, target);
+		LuaScriptInterface::setCreatureMetatable(L, -1, target);
+	} else {
+		lua_pushnil(L);
+	}
 
 	int32_t size0 = lua_gettop(L);
 
@@ -1436,8 +1410,8 @@ void MagicField::onStepInField(Creature* creature)
 	}
 
 	const ItemType& it = items[getID()];
-	if (it.condition) {
-		Condition* conditionCopy = it.condition->clone();
+	if (it.conditionDamage) {
+		Condition* conditionCopy = it.conditionDamage->clone();
 		uint32_t ownerId = getOwner();
 		if (ownerId) {
 			bool harmfulField = true;

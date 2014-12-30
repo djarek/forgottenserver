@@ -23,7 +23,7 @@
 #include "protocolgame.h"
 
 
-class ProtocolCast : public ProtocolGame
+class ProtocolCast final : public ProtocolGame
 {
 	public:
 		static const char* protocol_name() {
@@ -31,11 +31,7 @@ class ProtocolCast : public ProtocolGame
 		}
 
 		ProtocolCast(Connection_ptr connection);
-		virtual ~ProtocolCast();
-
-		virtual int32_t getProtocolId() {
-			return 0x0A;
-		}
+		~ProtocolCast();
 
 	private:
 

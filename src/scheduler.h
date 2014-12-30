@@ -31,8 +31,6 @@
 class SchedulerTask : public Task
 {
 	public:
-		~SchedulerTask() {}
-
 		void setEventId(uint32_t eventid) {
 			m_eventid = eventid;
 		}
@@ -75,7 +73,6 @@ class Scheduler
 {
 	public:
 		Scheduler();
-		~Scheduler() {}
 
 		uint32_t addEvent(SchedulerTask* task);
 		bool stopEvent(uint32_t eventId);
@@ -84,12 +81,6 @@ class Scheduler
 		void stop();
 		void shutdown();
 		void join();
-
-		enum SchedulerState {
-			STATE_RUNNING,
-			STATE_CLOSING,
-			STATE_TERMINATED
-		};
 
 	protected:
 		void schedulerThread();
@@ -101,7 +92,7 @@ class Scheduler
 		uint32_t m_lastEventId;
 		std::priority_queue<SchedulerTask*, std::vector<SchedulerTask*>, lessSchedTask > m_eventList;
 		std::unordered_set<uint32_t> m_eventIds;
-		SchedulerState m_threadState;
+		ThreadState m_threadState;
 };
 
 extern Scheduler g_scheduler;

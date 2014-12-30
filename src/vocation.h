@@ -26,7 +26,6 @@
 class Vocation
 {
 	public:
-		Vocation() {} // TODO: Remove this constructor when we can use emplace
 		Vocation(uint16_t id);
 
 		const std::string& getVocName() const {
@@ -35,10 +34,10 @@ class Vocation
 		const std::string& getVocDescription() const {
 			return description;
 		}
-		uint32_t getReqSkillTries(int32_t skill, int32_t level);
+		uint64_t getReqSkillTries(uint8_t skill, uint16_t level);
 		uint64_t getReqMana(uint32_t magLevel);
 
-		int32_t getId() const {
+		uint16_t getId() const {
 			return id;
 		}
 

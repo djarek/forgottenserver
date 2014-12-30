@@ -87,7 +87,7 @@ LuaScriptInterface& MoveEvents::getScriptInterface()
 	return m_scriptInterface;
 }
 
-std::string MoveEvents::getScriptBaseName()
+std::string MoveEvents::getScriptBaseName() const
 {
 	return "movements";
 }
@@ -102,14 +102,9 @@ Event* MoveEvents::getEvent(const std::string& nodeName)
 
 bool MoveEvents::registerEvent(Event* event, const pugi::xml_node& node)
 {
-	MoveEvent* moveEvent = dynamic_cast<MoveEvent*>(event);
-	if (!moveEvent) {
-		return false;
-	}
+	MoveEvent* moveEvent = reinterpret_cast<MoveEvent*>(event);
 
-	bool success = true;
-
-	MoveEvent_t eventType = moveEvent->getEventType();
+	const MoveEvent_t eventType = moveEvent->getEventType();
 	if (eventType == MOVE_EVENT_ADD_ITEM || eventType == MOVE_EVENT_REMOVE_ITEM) {
 		pugi::xml_attribute tileItemAttribute = node.attribute("tileitem");
 		if (tileItemAttribute && pugi::cast<uint16_t>(tileItemAttribute.value()) == 1) {
@@ -184,16 +179,16 @@ bool MoveEvents::registerEvent(Event* event, const pugi::xml_node& node)
 		}
 	} else if ((attr = node.attribute("pos"))) {
 		std::vector<int32_t> posList = vectorAtoi(explodeString(attr.as_string(), ";"));
-		if (posList.size() >= 3) {
-			Position pos(posList[0], posList[1], posList[2]);
-			addEvent(moveEvent, pos, m_positionMap);
-		} else {
-			success = false;
+		if (posList.size() < 3) {
+			return false;
 		}
+
+		Position pos(posList[0], posList[1], posList[2]);
+		addEvent(moveEvent, pos, m_positionMap);
 	} else {
-		success = false;
+		return false;
 	}
-	return success;
+	return true;
 }
 
 void MoveEvents::addEvent(MoveEvent* moveEvent, int32_t id, MoveListMap& map)
@@ -432,12 +427,7 @@ MoveEvent::MoveEvent(const MoveEvent* copy) :
 	}
 }
 
-MoveEvent::~MoveEvent()
-{
-	//
-}
-
-std::string MoveEvent::getScriptEventName()
+std::string MoveEvent::getScriptEventName() const
 {
 	switch (m_eventType) {
 		case MOVE_EVENT_STEP_IN: return "onStepIn";
@@ -599,11 +589,6 @@ bool MoveEvent::loadFunction(const std::string& functionName)
 
 MoveEvent_t MoveEvent::getEventType() const
 {
-	if (m_eventType == MOVE_EVENT_NONE) {
-		std::cout << "Error: [MoveEvent::getEventType()] MOVE_EVENT_NONE" << std::endl;
-		return (MoveEvent_t)0;
-	}
-
 	return m_eventType;
 }
 
@@ -685,12 +670,12 @@ uint32_t MoveEvent::EquipItem(MoveEvent* moveEvent, Player* player, Item* item, 
 	}
 
 	if (it.abilities->invisible) {
-		Condition* condition = Condition::createCondition((ConditionId_t)slot, CONDITION_INVISIBLE, -1, 0);
+		Condition* condition = Condition::createCondition(static_cast<ConditionId_t>(slot), CONDITION_INVISIBLE, -1, 0);
 		player->addCondition(condition);
 	}
 
 	if (it.abilities->manaShield) {
-		Condition* condition = Condition::createCondition((ConditionId_t)slot, CONDITION_MANASHIELD, -1, 0);
+		Condition* condition = Condition::createCondition(static_cast<ConditionId_t>(slot), CONDITION_MANASHIELD, -1, 0);
 		player->addCondition(condition);
 	}
 
@@ -699,12 +684,12 @@ uint32_t MoveEvent::EquipItem(MoveEvent* moveEvent, Player* player, Item* item, 
 	}
 
 	if (it.abilities->conditionSuppressions != 0) {
-		player->setConditionSuppressions(it.abilities->conditionSuppressions, false);
+		player->addConditionSuppressions(it.abilities->conditionSuppressions);
 		player->sendIcons();
 	}
 
 	if (it.abilities->regeneration) {
-		Condition* condition = Condition::createCondition((ConditionId_t)slot, CONDITION_REGENERATION, -1, 0);
+		Condition* condition = Condition::createCondition(static_cast<ConditionId_t>(slot), CONDITION_REGENERATION, -1, 0);
 
 		if (it.abilities->healthGain != 0) {
 			condition->setParam(CONDITION_PARAM_HEALTHGAIN, it.abilities->healthGain);
@@ -731,7 +716,7 @@ uint32_t MoveEvent::EquipItem(MoveEvent* moveEvent, Player* player, Item* item, 
 	for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
 		if (it.abilities->skills[i]) {
 			needUpdateSkills = true;
-			player->setVarSkill((skills_t)i, it.abilities->skills[i]);
+			player->setVarSkill(static_cast<skills_t>(i), it.abilities->skills[i]);
 		}
 	}
 
@@ -745,12 +730,12 @@ uint32_t MoveEvent::EquipItem(MoveEvent* moveEvent, Player* player, Item* item, 
 	for (int32_t s = STAT_FIRST; s <= STAT_LAST; ++s) {
 		if (it.abilities->stats[s]) {
 			needUpdateStats = true;
-			player->setVarStats((stats_t)s, it.abilities->stats[s]);
+			player->setVarStats(static_cast<stats_t>(s), it.abilities->stats[s]);
 		}
 
 		if (it.abilities->statsPercent[s]) {
 			needUpdateStats = true;
-			player->setVarStats((stats_t)s, (int32_t)(player->getDefaultStats((stats_t)s) * ((it.abilities->statsPercent[s] - 100) / 100.f)));
+			player->setVarStats(static_cast<stats_t>(s), static_cast<int32_t>(player->getDefaultStats(static_cast<stats_t>(s)) * ((it.abilities->statsPercent[s] - 100) / 100.f)));
 		}
 	}
 
@@ -781,11 +766,11 @@ uint32_t MoveEvent::DeEquipItem(MoveEvent*, Player* player, Item* item, slots_t 
 	}
 
 	if (it.abilities->invisible) {
-		player->removeCondition(CONDITION_INVISIBLE, (ConditionId_t)slot);
+		player->removeCondition(CONDITION_INVISIBLE, static_cast<ConditionId_t>(slot));
 	}
 
 	if (it.abilities->manaShield) {
-		player->removeCondition(CONDITION_MANASHIELD, (ConditionId_t)slot);
+		player->removeCondition(CONDITION_MANASHIELD, static_cast<ConditionId_t>(slot));
 	}
 
 	if (it.abilities->speed != 0) {
@@ -793,12 +778,12 @@ uint32_t MoveEvent::DeEquipItem(MoveEvent*, Player* player, Item* item, slots_t 
 	}
 
 	if (it.abilities->conditionSuppressions != 0) {
-		player->setConditionSuppressions(it.abilities->conditionSuppressions, true);
+		player->removeConditionSuppressions(it.abilities->conditionSuppressions);
 		player->sendIcons();
 	}
 
 	if (it.abilities->regeneration) {
-		player->removeCondition(CONDITION_REGENERATION, (ConditionId_t)slot);
+		player->removeCondition(CONDITION_REGENERATION, static_cast<ConditionId_t>(slot));
 	}
 
 	//skill modifiers
@@ -807,7 +792,7 @@ uint32_t MoveEvent::DeEquipItem(MoveEvent*, Player* player, Item* item, slots_t 
 	for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
 		if (it.abilities->skills[i] != 0) {
 			needUpdateSkills = true;
-			player->setVarSkill((skills_t)i, -it.abilities->skills[i]);
+			player->setVarSkill(static_cast<skills_t>(i), -it.abilities->skills[i]);
 		}
 	}
 
@@ -821,12 +806,12 @@ uint32_t MoveEvent::DeEquipItem(MoveEvent*, Player* player, Item* item, slots_t 
 	for (int32_t s = STAT_FIRST; s <= STAT_LAST; ++s) {
 		if (it.abilities->stats[s]) {
 			needUpdateStats = true;
-			player->setVarStats((stats_t)s, -it.abilities->stats[s]);
+			player->setVarStats(static_cast<stats_t>(s), -it.abilities->stats[s]);
 		}
 
 		if (it.abilities->statsPercent[s]) {
 			needUpdateStats = true;
-			player->setVarStats((stats_t)s, -(int32_t)(player->getDefaultStats((stats_t)s) * ((it.abilities->statsPercent[s] - 100) / 100.f)));
+			player->setVarStats(static_cast<stats_t>(s), -static_cast<int32_t>(player->getDefaultStats(static_cast<stats_t>(s)) * ((it.abilities->statsPercent[s] - 100) / 100.f)));
 		}
 	}
 
@@ -848,8 +833,8 @@ uint32_t MoveEvent::fireStepEvent(Creature* creature, Item* item, const Position
 
 bool MoveEvent::executeStep(Creature* creature, Item* item, const Position& pos)
 {
-	//onStepIn(cid, item, pos, fromPosition)
-	//onStepOut(cid, item, pos, fromPosition)
+	//onStepIn(creature, item, pos, fromPosition)
+	//onStepOut(creature, item, pos, fromPosition)
 	if (!m_scriptInterface->reserveScriptEnv()) {
 		std::cout << "[Error - MoveEvent::executeStep] Call stack overflow" << std::endl;
 		return false;
@@ -861,8 +846,9 @@ bool MoveEvent::executeStep(Creature* creature, Item* item, const Position& pos)
 	lua_State* L = m_scriptInterface->getLuaState();
 
 	m_scriptInterface->pushFunction(m_scriptId);
-	lua_pushnumber(L, creature->getID());
-	LuaScriptInterface::pushThing(L, item, env->addThing(item));
+	LuaScriptInterface::pushUserdata<Creature>(L, creature);
+	LuaScriptInterface::setCreatureMetatable(L, -1, creature);
+	LuaScriptInterface::pushThing(L, item);
 	LuaScriptInterface::pushPosition(L, pos);
 	LuaScriptInterface::pushPosition(L, creature->getLastPosition());
 
@@ -880,8 +866,8 @@ uint32_t MoveEvent::fireEquip(Player* player, Item* item, slots_t slot, bool boo
 
 bool MoveEvent::executeEquip(Player* player, Item* item, slots_t slot)
 {
-	//onEquip(cid, item, slot)
-	//onDeEquip(cid, item, slot)
+	//onEquip(player, item, slot)
+	//onDeEquip(player, item, slot)
 	if (!m_scriptInterface->reserveScriptEnv()) {
 		std::cout << "[Error - MoveEvent::executeEquip] Call stack overflow" << std::endl;
 		return false;
@@ -893,8 +879,9 @@ bool MoveEvent::executeEquip(Player* player, Item* item, slots_t slot)
 	lua_State* L = m_scriptInterface->getLuaState();
 
 	m_scriptInterface->pushFunction(m_scriptId);
-	lua_pushnumber(L, player->getID());
-	LuaScriptInterface::pushThing(L, item, env->addThing(item));
+	LuaScriptInterface::pushUserdata<Player>(L, player);
+	LuaScriptInterface::setMetatable(L, -1, "Player");
+	LuaScriptInterface::pushThing(L, item);
 	lua_pushnumber(L, slot);
 
 	return m_scriptInterface->callFunction(3);
@@ -924,8 +911,8 @@ bool MoveEvent::executeAddRemItem(Item* item, Item* tileItem, const Position& po
 	lua_State* L = m_scriptInterface->getLuaState();
 
 	m_scriptInterface->pushFunction(m_scriptId);
-	LuaScriptInterface::pushThing(L, item, env->addThing(item));
-	LuaScriptInterface::pushThing(L, tileItem, env->addThing(tileItem));
+	LuaScriptInterface::pushThing(L, item);
+	LuaScriptInterface::pushThing(L, tileItem);
 	LuaScriptInterface::pushPosition(L, pos);
 
 	return m_scriptInterface->callFunction(3);

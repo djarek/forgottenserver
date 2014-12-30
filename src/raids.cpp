@@ -142,7 +142,7 @@ void Raids::checkRaids()
 		for (auto it = raidList.begin(); it != raidList.end(); ++it) {
 			Raid* raid = *it;
 			if (now >= (getLastRaidEnd() + raid->getMargin())) {
-				if (MAX_RAND_RANGE * CHECK_RAIDS_INTERVAL / raid->getInterval() >= (uint32_t)uniform_random(0, MAX_RAND_RANGE)) {
+				if (MAX_RAND_RANGE * CHECK_RAIDS_INTERVAL / raid->getInterval() >= static_cast<uint32_t>(uniform_random(0, MAX_RAND_RANGE))) {
 					setRunning(raid);
 					raid->startRaid();
 
@@ -259,7 +259,7 @@ void Raid::executeRaidEvent(RaidEvent* raidEvent)
 		RaidEvent* newRaidEvent = getNextRaidEvent();
 
 		if (newRaidEvent) {
-			uint32_t ticks = (uint32_t)std::max<int32_t>(RAID_MINTICKS, newRaidEvent->getDelay() - raidEvent->getDelay());
+			uint32_t ticks = static_cast<uint32_t>(std::max<int32_t>(RAID_MINTICKS, newRaidEvent->getDelay() - raidEvent->getDelay()));
 			nextEventEvent = g_scheduler.addEvent(createSchedulerTask(ticks, std::bind(&Raid::executeRaidEvent, this, newRaidEvent)));
 		} else {
 			resetRaid();
@@ -346,11 +346,11 @@ bool AnnounceEvent::configureRaidEvent(const pugi::xml_node& eventNode)
 		} else if (tmpStrValue == "redconsole") {
 			m_messageType = MESSAGE_STATUS_CONSOLE_RED;
 		} else {
-			std::cout << "[Notice] Raid: Unknown type tag missing for announce event. Using default: " << (int32_t)m_messageType << std::endl;
+			std::cout << "[Notice] Raid: Unknown type tag missing for announce event. Using default: " << static_cast<uint32_t>(m_messageType) << std::endl;
 		}
 	} else {
 		m_messageType = MESSAGE_EVENT_ADVANCE;
-		std::cout << "[Notice] Raid: type tag missing for announce event. Using default: " << (int32_t)m_messageType << std::endl;
+		std::cout << "[Notice] Raid: type tag missing for announce event. Using default: " << static_cast<uint32_t>(m_messageType) << std::endl;
 	}
 	return true;
 }
@@ -498,23 +498,23 @@ bool AreaSpawnEvent::configureRaidEvent(const pugi::xml_node& eventNode)
 	}
 
 	for (pugi::xml_node monsterNode = eventNode.first_child(); monsterNode; monsterNode = monsterNode.next_sibling()) {
-		std::string name;
+		const char* name;
 
 		if ((attr = monsterNode.attribute("name"))) {
-			name = attr.as_string();
+			name = attr.value();
 		} else {
 			std::cout << "[Error] Raid: name tag missing for monster node." << std::endl;
 			return false;
 		}
 
-		int32_t minAmount;
+		uint32_t minAmount;
 		if ((attr = monsterNode.attribute("minamount"))) {
 			minAmount = pugi::cast<uint32_t>(attr.value());
 		} else {
 			minAmount = 0;
 		}
 
-		int32_t maxAmount;
+		uint32_t maxAmount;
 		if ((attr = monsterNode.attribute("maxamount"))) {
 			maxAmount = pugi::cast<uint32_t>(attr.value());
 		} else {
@@ -531,40 +531,19 @@ bool AreaSpawnEvent::configureRaidEvent(const pugi::xml_node& eventNode)
 			}
 		}
 
-		addMonster(name, minAmount, maxAmount);
+		m_spawnList.emplace_back(name, minAmount, maxAmount);
 	}
 	return true;
 }
 
-AreaSpawnEvent::~AreaSpawnEvent()
-{
-	for (MonsterSpawn* spawn : m_spawnList) {
-		delete spawn;
-	}
-}
-
-void AreaSpawnEvent::addMonster(MonsterSpawn* monsterSpawn)
-{
-	m_spawnList.push_back(monsterSpawn);
-}
-
-void AreaSpawnEvent::addMonster(const std::string& monsterName, uint32_t minAmount, uint32_t maxAmount)
-{
-	MonsterSpawn* monsterSpawn = new MonsterSpawn();
-	monsterSpawn->name = monsterName;
-	monsterSpawn->minAmount = minAmount;
-	monsterSpawn->maxAmount = maxAmount;
-	addMonster(monsterSpawn);
-}
-
 bool AreaSpawnEvent::executeEvent()
 {
-	for (MonsterSpawn* spawn : m_spawnList) {
-		uint32_t amount = uniform_random(spawn->minAmount, spawn->maxAmount);
+	for (const MonsterSpawn& spawn : m_spawnList) {
+		uint32_t amount = uniform_random(spawn.minAmount, spawn.maxAmount);
 		for (uint32_t i = 0; i < amount; ++i) {
-			Monster* monster = Monster::createMonster(spawn->name);
+			Monster* monster = Monster::createMonster(spawn.name);
 			if (!monster) {
-				std::cout << "[Error - AreaSpawnEvent::executeEvent] Can't create monster " << spawn->name << std::endl;
+				std::cout << "[Error - AreaSpawnEvent::executeEvent] Can't create monster " << spawn.name << std::endl;
 				return false;
 			}
 
@@ -610,7 +589,7 @@ bool ScriptEvent::configureRaidEvent(const pugi::xml_node& eventNode)
 	return true;
 }
 
-std::string ScriptEvent::getScriptEventName()
+std::string ScriptEvent::getScriptEventName() const
 {
 	return "onRaid";
 }

@@ -104,9 +104,12 @@ void ProtocolLogin::getCharacterList(const std::string& accountName, const std::
 
 	OutputMessage_ptr output = OutputMessagePool::getInstance()->getOutputMessage(this, false);
 	if (output) {
+		//Update premium days
+		Game::updatePremium(account);
+
 		addWorldInfo(output);
 
-		output->AddByte((uint8_t)account.charList.size());
+		output->AddByte(static_cast<uint8_t>(account.charList.size()));
 		for (const std::string& characterName : account.charList) {
 			output->AddByte(0);
 			output->AddString(characterName);

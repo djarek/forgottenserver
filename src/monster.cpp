@@ -35,19 +35,13 @@ int32_t Monster::despawnRadius;
 
 uint32_t Monster::monsterAutoID = 0x40000000;
 
-Monster* Monster::createMonster(MonsterType* mType)
-{
-	return new Monster(mType);
-}
-
 Monster* Monster::createMonster(const std::string& name)
 {
 	MonsterType* mType = g_monsters.getMonsterType(name);
 	if (!mType) {
 		return nullptr;
 	}
-
-	return createMonster(mType);
+	return new Monster(mType);
 }
 
 Monster::Monster(MonsterType* _mtype) :
@@ -59,6 +53,8 @@ Monster::Monster(MonsterType* _mtype) :
 	spawn = nullptr;
 	defaultOutfit = mType->outfit;
 	currentOutfit = mType->outfit;
+
+	skull = mType->skull;
 
 	health = mType->health;
 	healthMax = mType->healthMax;
@@ -123,12 +119,7 @@ void Monster::onAttackedCreatureDisappear(bool)
 	extraMeleeAttack = true;
 }
 
-void Monster::onFollowCreatureDisappear(bool)
-{
-	//
-}
-
-void Monster::onCreatureAppear(const Creature* creature, bool isLogin)
+void Monster::onCreatureAppear(Creature* creature, bool isLogin)
 {
 	Creature::onCreatureAppear(creature, isLogin);
 
@@ -149,7 +140,7 @@ void Monster::onCreatureAppear(const Creature* creature, bool isLogin)
 		LuaScriptInterface::pushUserdata<Monster>(L, this);
 		LuaScriptInterface::setMetatable(L, -1, "Monster");
 
-		LuaScriptInterface::pushUserdata<Creature>(L, const_cast<Creature*>(creature));
+		LuaScriptInterface::pushUserdata<Creature>(L, creature);
 		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
 
 		if (scriptInterface->callFunction(2)) {
@@ -166,11 +157,11 @@ void Monster::onCreatureAppear(const Creature* creature, bool isLogin)
 		updateTargetList();
 		updateIdleStatus();
 	} else {
-		onCreatureEnter(const_cast<Creature*>(creature));
+		onCreatureEnter(creature);
 	}
 }
 
-void Monster::onCreatureDisappear(const Creature* creature, uint32_t stackpos, bool isLogout)
+void Monster::onCreatureDisappear(Creature* creature, uint32_t stackpos, bool isLogout)
 {
 	Creature::onCreatureDisappear(creature, stackpos, isLogout);
 
@@ -191,7 +182,7 @@ void Monster::onCreatureDisappear(const Creature* creature, uint32_t stackpos, b
 		LuaScriptInterface::pushUserdata<Monster>(L, this);
 		LuaScriptInterface::setMetatable(L, -1, "Monster");
 
-		LuaScriptInterface::pushUserdata<Creature>(L, const_cast<Creature*>(creature));
+		LuaScriptInterface::pushUserdata<Creature>(L, creature);
 		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
 
 		if (scriptInterface->callFunction(2)) {
@@ -206,11 +197,11 @@ void Monster::onCreatureDisappear(const Creature* creature, uint32_t stackpos, b
 
 		setIdle(true);
 	} else {
-		onCreatureLeave(const_cast<Creature*>(creature));
+		onCreatureLeave(creature);
 	}
 }
 
-void Monster::onCreatureMove(const Creature* creature, const Tile* newTile, const Position& newPos,
+void Monster::onCreatureMove(Creature* creature, const Tile* newTile, const Position& newPos,
                              const Tile* oldTile, const Position& oldPos, bool teleport)
 {
 	Creature::onCreatureMove(creature, newTile, newPos, oldTile, oldPos, teleport);
@@ -232,7 +223,7 @@ void Monster::onCreatureMove(const Creature* creature, const Tile* newTile, cons
 		LuaScriptInterface::pushUserdata<Monster>(L, this);
 		LuaScriptInterface::setMetatable(L, -1, "Monster");
 
-		LuaScriptInterface::pushUserdata<Creature>(L, const_cast<Creature*>(creature));
+		LuaScriptInterface::pushUserdata<Creature>(L, creature);
 		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
 
 		LuaScriptInterface::pushPosition(L, oldPos);
@@ -255,9 +246,9 @@ void Monster::onCreatureMove(const Creature* creature, const Tile* newTile, cons
 		bool canSeeOldPos = canSee(oldPos);
 
 		if (canSeeNewPos && !canSeeOldPos) {
-			onCreatureEnter(const_cast<Creature*>(creature));
+			onCreatureEnter(creature);
 		} else if (!canSeeNewPos && canSeeOldPos) {
-			onCreatureLeave(const_cast<Creature*>(creature));
+			onCreatureLeave(creature);
 		}
 
 		if (canSeeNewPos && isSummon() && getMaster() == creature) {
@@ -287,13 +278,13 @@ void Monster::onCreatureMove(const Creature* creature, const Tile* newTile, cons
 				}
 			} else if (isOpponent(creature)) {
 				//we have no target lets try pick this one
-				selectTarget(const_cast<Creature*>(creature));
+				selectTarget(creature);
 			}
 		}
 	}
 }
 
-void Monster::onCreatureSay(const Creature* creature, SpeakClasses type, const std::string& text)
+void Monster::onCreatureSay(Creature* creature, SpeakClasses type, const std::string& text)
 {
 	Creature::onCreatureSay(creature, type, text);
 
@@ -314,7 +305,7 @@ void Monster::onCreatureSay(const Creature* creature, SpeakClasses type, const s
 		LuaScriptInterface::pushUserdata<Monster>(L, this);
 		LuaScriptInterface::setMetatable(L, -1, "Monster");
 
-		LuaScriptInterface::pushUserdata<Creature>(L, const_cast<Creature*>(creature));
+		LuaScriptInterface::pushUserdata<Creature>(L, creature);
 		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
 
 		lua_pushnumber(L, type);
@@ -602,7 +593,7 @@ BlockType_t Monster::blockHit(Creature* attacker, CombatType_t combatType, int32
 		}
 
 		if (elementMod != 0) {
-			damage = (int32_t)std::ceil(damage * ((float)(100 - elementMod) / 100));
+			damage = static_cast<int32_t>(std::ceil(damage * ((100 - elementMod) / 100.)));
 			if (damage <= 0) {
 				damage = 0;
 				blockType = BLOCK_DEFENSE;
@@ -776,8 +767,7 @@ void Monster::doAttacking(uint32_t interval)
 	}
 
 	bool updateLook = true;
-
-	resetTicks = interval != 0;
+	bool resetTicks = interval != 0;
 	attackTicks += interval;
 
 	const Position& myPos = getPosition();
@@ -786,8 +776,8 @@ void Monster::doAttacking(uint32_t interval)
 	for (const spellBlock_t& spellBlock : mType->spellAttackList) {
 		bool inRange = false;
 
-		if (canUseSpell(myPos, targetPos, spellBlock, interval, inRange)) {
-			if (spellBlock.chance >= (uint32_t)uniform_random(1, 100)) {
+		if (canUseSpell(myPos, targetPos, spellBlock, interval, inRange, resetTicks)) {
+			if (spellBlock.chance >= static_cast<uint32_t>(uniform_random(1, 100))) {
 				if (updateLook) {
 					updateLookDirection();
 					updateLook = false;
@@ -837,7 +827,7 @@ bool Monster::canUseAttack(const Position& pos, const Creature* target) const
 }
 
 bool Monster::canUseSpell(const Position& pos, const Position& targetPos,
-                          const spellBlock_t& sb, uint32_t interval, bool& inRange)
+                          const spellBlock_t& sb, uint32_t interval, bool& inRange, bool& resetTicks)
 {
 	inRange = true;
 
@@ -873,7 +863,7 @@ bool Monster::canUseSpell(const Position& pos, const Position& targetPos,
 void Monster::onThinkTarget(uint32_t interval)
 {
 	if (!isSummon()) {
-		if (mType->changeTargetSpeed > 0) {
+		if (mType->changeTargetSpeed != 0) {
 			bool canChangeTarget = true;
 
 			if (targetChangeCooldown > 0) {
@@ -881,7 +871,7 @@ void Monster::onThinkTarget(uint32_t interval)
 
 				if (targetChangeCooldown <= 0) {
 					targetChangeCooldown = 0;
-					targetChangeTicks = (uint32_t)mType->changeTargetSpeed;
+					targetChangeTicks = mType->changeTargetSpeed;
 				} else {
 					canChangeTarget = false;
 				}
@@ -890,9 +880,9 @@ void Monster::onThinkTarget(uint32_t interval)
 			if (canChangeTarget) {
 				targetChangeTicks += interval;
 
-				if (targetChangeTicks >= (uint32_t)mType->changeTargetSpeed) {
+				if (targetChangeTicks >= mType->changeTargetSpeed) {
 					targetChangeTicks = 0;
-					targetChangeCooldown = (uint32_t)mType->changeTargetSpeed;
+					targetChangeCooldown = mType->changeTargetSpeed;
 
 					if (mType->changeTargetChance >= uniform_random(1, 100)) {
 						if (mType->targetDistance <= 1) {
@@ -909,7 +899,7 @@ void Monster::onThinkTarget(uint32_t interval)
 
 void Monster::onThinkDefense(uint32_t interval)
 {
-	resetTicks = true;
+	bool resetTicks = true;
 	defenseTicks += interval;
 
 	for (const spellBlock_t& spellBlock : mType->spellDefenseList) {
@@ -923,7 +913,7 @@ void Monster::onThinkDefense(uint32_t interval)
 			continue;
 		}
 
-		if ((spellBlock.chance >= (uint32_t)uniform_random(1, 100))) {
+		if ((spellBlock.chance >= static_cast<uint32_t>(uniform_random(1, 100)))) {
 			minCombatValue = spellBlock.minCombatValue;
 			maxCombatValue = spellBlock.maxCombatValue;
 			spellBlock.spell->castSpell(this, this);
@@ -946,7 +936,7 @@ void Monster::onThinkDefense(uint32_t interval)
 				continue;
 			}
 
-			if (summonBlock.chance < (uint32_t)uniform_random(1, 100)) {
+			if (summonBlock.chance < static_cast<uint32_t>(uniform_random(1, 100))) {
 				continue;
 			}
 
@@ -981,7 +971,7 @@ void Monster::onThinkYell(uint32_t interval)
 	if (yellTicks >= mType->yellSpeedTicks) {
 		yellTicks = 0;
 
-		if (!mType->voiceVector.empty() && (mType->yellChance >= (uint32_t)uniform_random(1, 100))) {
+		if (!mType->voiceVector.empty() && (mType->yellChance >= static_cast<uint32_t>(uniform_random(1, 100)))) {
 			uint32_t index = uniform_random(0, mType->voiceVector.size() - 1);
 			const voiceBlock_t& vb = mType->voiceVector[index];
 
@@ -1062,7 +1052,7 @@ bool Monster::pushCreature(Creature* creature)
 
 	for (Direction dir : dirList) {
 		const Position& tryPos = Spells::getCasterPosition(creature, dir);
-		Tile* toTile = g_game.getTile(tryPos.x, tryPos.y, tryPos.z);
+		Tile* toTile = g_game.getTile(tryPos);
 		if (toTile && !toTile->hasProperty(CONST_PROP_BLOCKPATH)) {
 			if (g_game.internalMoveCreature(creature, dir) == RETURNVALUE_NOERROR) {
 				return true;
@@ -1111,7 +1101,6 @@ bool Monster::getNextStep(Direction& dir, uint32_t& flags)
 	}
 
 	bool result = false;
-
 	if ((!followCreature || !hasFollowPath) && !isSummon()) {
 		if (followCreature || getTimeSinceLastMove() > 1000) {
 			//choose a random direction
@@ -1119,7 +1108,6 @@ bool Monster::getNextStep(Direction& dir, uint32_t& flags)
 		}
 	} else if (isSummon() || followCreature) {
 		result = Creature::getNextStep(dir, flags);
-
 		if (result) {
 			flags |= FLAG_PATHFINDING;
 		} else {
@@ -1127,7 +1115,7 @@ bool Monster::getNextStep(Direction& dir, uint32_t& flags)
 			if (attackedCreature && attackedCreature == followCreature) {
 				if (isFleeing()) {
 					result = getDanceStep(getPosition(), dir, false, false);
-				} else if (mType->staticAttackChance < (uint32_t)uniform_random(1, 100)) {
+				} else if (mType->staticAttackChance < static_cast<uint32_t>(uniform_random(1, 100))) {
 					result = getDanceStep(getPosition(), dir);
 				}
 			}
@@ -1136,8 +1124,7 @@ bool Monster::getNextStep(Direction& dir, uint32_t& flags)
 
 	if (result && (canPushItems() || canPushCreatures())) {
 		const Position& pos = Spells::getCasterPosition(this, dir);
-		Tile* tile = g_game.getTile(pos.x, pos.y, pos.z);
-
+		Tile* tile = g_game.getTile(pos);
 		if (tile) {
 			if (canPushItems()) {
 				pushItems(tile);
@@ -1152,7 +1139,7 @@ bool Monster::getNextStep(Direction& dir, uint32_t& flags)
 	return result;
 }
 
-bool Monster::getRandomStep(const Position& creaturePos, Direction& dir)
+bool Monster::getRandomStep(const Position& creaturePos, Direction& dir) const
 {
 	static std::vector<Direction> dirList {
 		     NORTH,
@@ -1769,7 +1756,7 @@ bool Monster::getDistanceStep(const Position& targetPos, Direction& dir, bool fl
 	return true;
 }
 
-bool Monster::isInSpawnRange(const Position& toPos)
+bool Monster::isInSpawnRange(const Position& toPos) const
 {
 	if (masterRadius == -1) {
 		return true;
@@ -1778,7 +1765,7 @@ bool Monster::isInSpawnRange(const Position& toPos)
 	return !inDespawnRange(toPos);
 }
 
-bool Monster::canWalkTo(Position pos, Direction dir)
+bool Monster::canWalkTo(Position pos, Direction dir) const
 {
 	pos = getNextPosition(dir, pos);
 	if (isInSpawnRange(pos)) {
@@ -1786,7 +1773,7 @@ bool Monster::canWalkTo(Position pos, Direction dir)
 			return false;
 		}
 
-		Tile* tile = g_game.getTile(pos.x, pos.y, pos.z);
+		Tile* tile = g_game.getTile(pos);
 		if (tile && tile->getTopVisibleCreature(this) == nullptr && tile->__queryAdd(0, this, 1, FLAG_PATHFINDING) == RETURNVALUE_NOERROR) {
 			return true;
 		}
@@ -1825,11 +1812,10 @@ Item* Monster::getCorpse(Creature* _lastHitCreature, Creature* mostDamageCreatur
 			}
 		}
 	}
-
 	return corpse;
 }
 
-bool Monster::inDespawnRange(const Position& pos)
+bool Monster::inDespawnRange(const Position& pos) const
 {
 	if (!spawn) {
 		return false;

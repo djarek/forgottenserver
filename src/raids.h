@@ -30,6 +30,8 @@ enum RaidState_t {
 };
 
 struct MonsterSpawn {
+	MonsterSpawn(const char* name, uint32_t minAmount, uint32_t maxAmount) : name(name), minAmount(minAmount), maxAmount(maxAmount) {}
+
 	std::string name;
 	uint32_t minAmount;
 	uint32_t maxAmount;
@@ -52,6 +54,10 @@ class Raids
 		}
 
 		~Raids();
+
+		// non-copyable
+		Raids(const Raids&) = delete;
+		Raids& operator=(const Raids&) = delete;
 
 		bool loadFromXml();
 		bool startup();
@@ -107,6 +113,10 @@ class Raid
 			: name(name), interval(interval), nextEvent(0), margin(marginTime), state(RAIDSTATE_IDLE), nextEventEvent(0), loaded(false), repeat(repeat) {}
 		~Raid();
 
+		// non-copyable
+		Raid(const Raid&) = delete;
+		Raid& operator=(const Raid&) = delete;
+
 		bool loadFromXml(const std::string& _filename);
 
 		void startRaid();
@@ -154,8 +164,7 @@ class Raid
 class RaidEvent
 {
 	public:
-		RaidEvent() {}
-		virtual ~RaidEvent() {}
+		virtual ~RaidEvent() = default;
 
 		virtual bool configureRaidEvent(const pugi::xml_node& eventNode);
 
@@ -177,72 +186,63 @@ class RaidEvent
 		uint32_t m_delay;
 };
 
-class AnnounceEvent : public RaidEvent
+class AnnounceEvent final : public RaidEvent
 {
 	public:
 		AnnounceEvent() {
 			m_messageType = MESSAGE_EVENT_ADVANCE;
 		}
-		virtual ~AnnounceEvent() {}
 
-		virtual bool configureRaidEvent(const pugi::xml_node& eventNode);
+		bool configureRaidEvent(const pugi::xml_node& eventNode) final;
 
-		virtual bool executeEvent();
+		bool executeEvent() final;
 
 	private:
 		std::string m_message;
 		MessageClasses m_messageType;
 };
 
-class SingleSpawnEvent : public RaidEvent
+class SingleSpawnEvent final : public RaidEvent
 {
 	public:
-		SingleSpawnEvent() {}
-		virtual ~SingleSpawnEvent() {}
+		bool configureRaidEvent(const pugi::xml_node& eventNode) final;
 
-		virtual bool configureRaidEvent(const pugi::xml_node& eventNode);
-
-		virtual bool executeEvent();
+		bool executeEvent() final;
 
 	private:
 		std::string m_monsterName;
 		Position m_position;
 };
 
-class AreaSpawnEvent : public RaidEvent
+class AreaSpawnEvent final : public RaidEvent
 {
 	public:
-		AreaSpawnEvent() {}
-		virtual ~AreaSpawnEvent();
+		bool configureRaidEvent(const pugi::xml_node& eventNode) final;
 
-		virtual bool configureRaidEvent(const pugi::xml_node& eventNode);
-
-		void addMonster(MonsterSpawn* monsterSpawn);
 		void addMonster(const std::string& monsterName, uint32_t minAmount, uint32_t maxAmount);
 
-		virtual bool executeEvent();
+		bool executeEvent() final;
 
 	private:
-		std::list<MonsterSpawn*> m_spawnList;
+		std::list<MonsterSpawn> m_spawnList;
 		Position m_fromPos, m_toPos;
 };
 
-class ScriptEvent : public RaidEvent, public Event
+class ScriptEvent final : public RaidEvent, public Event
 {
 	public:
 		ScriptEvent(LuaScriptInterface* _interface);
 		ScriptEvent(const ScriptEvent* copy);
-		~ScriptEvent() {}
 
-		virtual bool configureRaidEvent(const pugi::xml_node& eventNode);
-		virtual bool configureEvent(const pugi::xml_node&) {
+		bool configureRaidEvent(const pugi::xml_node& eventNode) final;
+		bool configureEvent(const pugi::xml_node&) final {
 			return false;
 		}
 
-		bool executeEvent();
+		bool executeEvent() final;
 
 	protected:
-		virtual std::string getScriptEventName();
+		std::string getScriptEventName() const final;
 };
 
 #endif

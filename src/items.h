@@ -23,6 +23,7 @@
 #include "const.h"
 #include "enums.h"
 #include "itemloader.h"
+#include "optional.h"
 #include "position.h"
 
 enum SlotPositionBits : uint32_t {
@@ -74,7 +75,7 @@ struct Abilities {
 
 		conditionImmunities = 0;
 		conditionSuppressions = 0;
-	};
+	}
 
 	//elemental damage
 	CombatType_t elementType;
@@ -107,13 +108,12 @@ struct Abilities {
 	uint32_t conditionSuppressions;
 };
 
-class Condition;
+class ConditionDamage;
 
 class ItemType
 {
 	public:
 		ItemType();
-		~ItemType();
 
 		bool isGroundTile() const {
 			return (group == ITEM_GROUP_GROUND);
@@ -159,12 +159,11 @@ class ItemType
 			return (isFluidContainer() || isSplash() || stackable || charges != 0);
 		}
 
-		Abilities* getAbilities() {
-			if (abilities == nullptr) {
-				abilities = new Abilities();
+		Abilities& getAbilities() {
+			if (!abilities) {
+				abilities.set(new Abilities());
 			}
-
-			return abilities;
+			return *abilities;
 		}
 
 		std::string getPluralName() const {
@@ -197,20 +196,17 @@ class ItemType
 		std::string runeSpellName;
 		std::string vocationString;
 
-		Abilities* abilities;
-		Condition* condition;
+		Optional<Abilities> abilities;
+		Optional<ConditionDamage> conditionDamage;
 
-		float weight;
-
+		uint32_t weight;
 		uint32_t levelDoor;
 		uint32_t decayTime;
 		uint32_t wieldInfo;
 		uint32_t minReqLevel;
 		uint32_t minReqMagicLevel;
 		uint32_t charges;
-		uint32_t shootRange;
 		int32_t breakChance;
-		int32_t hitChance;
 		int32_t maxHitChance;
 		int32_t decayTo;
 		int32_t attack;
@@ -233,8 +229,6 @@ class ItemType
 		uint16_t slotPosition;
 		uint16_t speed;
 		uint16_t wareId;
-		uint16_t lightLevel;
-		uint16_t lightColor;
 
 		MagicEffectClasses magicEffect;
 		Direction bedPartnerDir;
@@ -246,6 +240,10 @@ class ItemType
 		FluidTypes_t fluidSource;
 
 		uint8_t alwaysOnTopOrder;
+		uint8_t lightLevel;
+		uint8_t lightColor;
+		uint8_t shootRange;
+		int8_t hitChance;
 
 		bool floorChangeDown;
 		bool floorChangeNorth;
@@ -286,6 +284,10 @@ class Items
 	public:
 		Items();
 		~Items();
+
+		// non-copyable
+		Items(const Items&) = delete;
+		Items& operator=(const Items&) = delete;
 
 		bool reload();
 		void clear();

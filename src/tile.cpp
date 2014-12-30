@@ -235,12 +235,7 @@ BedItem* Tile::getBedItem() const
 	return nullptr;
 }
 
-Creature* Tile::getTopCreature()
-{
-	return const_cast<Creature*>(static_cast<const Tile*>(this)->getTopCreature());
-}
-
-const Creature* Tile::getTopCreature() const
+Creature* Tile::getTopCreature() const
 {
 	if (const CreatureVector* creatures = getCreatures()) {
 		if (!creatures->empty()) {
@@ -260,12 +255,7 @@ const Creature* Tile::getBottomCreature() const
 	return nullptr;
 }
 
-Creature* Tile::getTopVisibleCreature(const Creature* creature)
-{
-	return const_cast<Creature*>(static_cast<const Tile*>(this)->getTopVisibleCreature(creature));
-}
-
-const Creature* Tile::getTopVisibleCreature(const Creature* creature) const
+Creature* Tile::getTopVisibleCreature(const Creature* creature) const
 {
 	if (const CreatureVector* creatures = getCreatures()) {
 		if (creature) {
@@ -566,9 +556,6 @@ void Tile::moveCreature(Creature* creature, Cylinder* toCylinder, bool forceTele
 
 ReturnValue Tile::__queryAdd(int32_t, const Thing* thing, uint32_t, uint32_t flags, Creature*) const
 {
-	const CreatureVector* creatures = getCreatures();
-	const TileItemVector* items = getItemList();
-
 	if (const Creature* creature = thing->getCreature()) {
 		if (hasBitSet(FLAG_NOLIMIT, flags)) {
 			return RETURNVALUE_NOERROR;
@@ -593,6 +580,7 @@ ReturnValue Tile::__queryAdd(int32_t, const Thing* thing, uint32_t, uint32_t fla
 				return RETURNVALUE_NOTPOSSIBLE;
 			}
 
+			const CreatureVector* creatures = getCreatures();
 			if (monster->canPushCreatures() && !monster->isSummon()) {
 				if (creatures) {
 					for (Creature* tileCreature : *creatures) {
@@ -649,7 +637,10 @@ ReturnValue Tile::__queryAdd(int32_t, const Thing* thing, uint32_t, uint32_t fla
 			}
 
 			return RETURNVALUE_NOERROR;
-		} else if (const Player* player = creature->getPlayer()) {
+		}
+
+		const CreatureVector* creatures = getCreatures();
+		if (const Player* player = creature->getPlayer()) {
 			if (creatures && !creatures->empty() && !hasBitSet(FLAG_IGNOREBLOCKCREATURE, flags) && !player->isAccessPlayer()) {
 				for (const Creature* tileCreature : *creatures) {
 					if (!player->canWalkthrough(tileCreature)) {
@@ -685,6 +676,7 @@ ReturnValue Tile::__queryAdd(int32_t, const Thing* thing, uint32_t, uint32_t fla
 			}
 		}
 
+		const TileItemVector* items = getItemList();
 		if (items) {
 			if (!hasBitSet(FLAG_IGNOREBLOCKITEM, flags)) {
 				//If the FLAG_IGNOREBLOCKITEM bit isn't set we dont have to iterate every single item
@@ -709,6 +701,7 @@ ReturnValue Tile::__queryAdd(int32_t, const Thing* thing, uint32_t, uint32_t fla
 			}
 		}
 	} else if (const Item* item = thing->getItem()) {
+		const TileItemVector* items = getItemList();
 		if (items && items->size() >= 0xFFFF) {
 			return RETURNVALUE_NOTPOSSIBLE;
 		}
@@ -722,6 +715,7 @@ ReturnValue Tile::__queryAdd(int32_t, const Thing* thing, uint32_t, uint32_t fla
 			return RETURNVALUE_NOTPOSSIBLE;
 		}
 
+		const CreatureVector* creatures = getCreatures();
 		if (creatures && !creatures->empty() && item->isBlocking() && !hasBitSet(FLAG_IGNOREBLOCKCREATURE, flags)) {
 			for (const Creature* tileCreature : *creatures) {
 				if (!tileCreature->isInGhostMode()) {
@@ -814,9 +808,9 @@ Cylinder* Tile::__queryDestination(int32_t&, const Thing*, Item** destItem, uint
 	*destItem = nullptr;
 
 	if (floorChangeDown()) {
-		int32_t dx = tilePos.x;
-		int32_t dy = tilePos.y;
-		int32_t dz = tilePos.z + 1;
+		uint16_t dx = tilePos.x;
+		uint16_t dy = tilePos.y;
+		uint8_t dz = tilePos.z + 1;
 
 		Tile* southDownTile = g_game.getTile(dx, dy - 1, dz);
 		if (southDownTile && southDownTile->floorChange(SOUTH_ALT)) {
@@ -859,9 +853,9 @@ Cylinder* Tile::__queryDestination(int32_t&, const Thing*, Item** destItem, uint
 			}
 		}
 	} else if (floorChange()) {
-		int32_t dx = tilePos.x;
-		int32_t dy = tilePos.y;
-		int32_t dz = tilePos.getZ() - 1;
+		uint16_t dx = tilePos.x;
+		uint16_t dy = tilePos.y;
+		uint8_t dz = tilePos.z - 1;
 
 		if (floorChange(NORTH)) {
 			--dy;
@@ -1082,11 +1076,11 @@ void Tile::__replaceThing(uint32_t index, Thing* thing)
 
 	CreatureVector* creatures = getCreatures();
 	if (creatures) {
-		if (!isInserted && pos < (int32_t)creatures->size()) {
+		if (!isInserted && pos < static_cast<int32_t>(creatures->size())) {
 			return /*RETURNVALUE_NOTPOSSIBLE*/;
 		}
 
-		pos -= (uint32_t)creatures->size();
+		pos -= static_cast<uint32_t>(creatures->size());
 	}
 
 	if (items && !isInserted) {
@@ -1178,7 +1172,7 @@ void Tile::__removeThing(Thing* thing, uint32_t count)
 		}
 
 		if (item->isStackable() && count != item->getItemCount()) {
-			uint8_t newCount = (uint8_t)std::max<int32_t>(0, (int32_t)(item->getItemCount() - count));
+			uint8_t newCount = static_cast<uint8_t>(std::max<int32_t>(0, static_cast<int32_t>(item->getItemCount() - count)));
 
 			updateTileFlags(item, true);
 			item->setItemCount(newCount);
