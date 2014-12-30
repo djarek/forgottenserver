@@ -197,8 +197,9 @@ void ProtocolCast::login(const std::string& liveCastName, const std::string& liv
 		syncChatChannels();
 
 		liveCasterProtocol->addSpectator(this);
-	} else
+	} else {
 		disconnectSpectator("Live cast no longer exists. Please relogin to refresh the list.");
+	}
 }
 
 void ProtocolCast::logout()
