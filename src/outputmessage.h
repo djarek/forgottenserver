@@ -93,11 +93,11 @@ class OutputMessage : public NetworkMessage
 			m_isBroadcastMsg = isBroadcast;
 		}
 
-		bool isBroadcastMsg() {
+		bool isBroadcastMsg() const {
 			return m_isBroadcastMsg;
 		}
 
-		OutputMessage_ptr getUnencryptedCopy() {
+		OutputMessage_ptr getUnencryptedCopy() const {
 			return m_unencryptedCopy;
 		}
 

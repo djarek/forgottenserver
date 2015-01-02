@@ -75,7 +75,7 @@ void ProtocolCast::disconnectSpectator(const std::string& message)
 
 void ProtocolCast::onRecvFirstMessage(NetworkMessage& msg)
 {
-    if (g_game.getGameState() == GAME_STATE_SHUTDOWN) {
+	if (g_game.getGameState() == GAME_STATE_SHUTDOWN) {
 		getConnection()->closeConnection();
 		return;
 	}

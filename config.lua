@@ -6,6 +6,7 @@ protectionLevel = 1
 killsToRedSkull = 3
 killsToBlackSkull = 6
 pzLocked = 60000
+removeAmmoWhenUsingDistanceWeapon = "yes"
 removeChargesFromRunes = "yes"
 timeToDecreaseFrags = 24 * 60 * 60 * 1000
 whiteSkullTime = 15 * 60 * 1000
@@ -58,7 +59,7 @@ maxMarketOffersAtATimePerPlayer = 100
 
 -- MySQL
 mysqlHost = "127.0.0.1"
-mysqlUser = "root"
+mysqlUser = "forgottenserver"
 mysqlPass = ""
 mysqlDatabase = "forgottenserver"
 mysqlPort = 3306

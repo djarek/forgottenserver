@@ -205,7 +205,7 @@ void ProtocolLogin::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	if (accountName.empty()) {
-		if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING)) {
+		if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING)) {
 			dispatchDisconnectClient("Invalid account name.");
 		} else {
 			g_dispatcher.addTask(createTask(std::bind(&ProtocolLogin::getCastingStreamsList, this)));

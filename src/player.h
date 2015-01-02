@@ -1170,19 +1170,11 @@ class Player final : public Creature, public Cylinder
 		bool hasLearnedInstantSpell(const std::string& name) const;
 
 		bool startLiveCast(const std::string& password) {
-			if (client) {
-				return client->startLiveCast(password);
-			} else {
-				return false;
-			}
+			return client != nullptr && client->startLiveCast(password);
 		}
 
 		bool stopLiveCast() {
-			if (client) {
-				return client->stopLiveCast();
-			} else {
-				return false;
-			}
+			return client != nullptr && client->stopLiveCast();
 		}
 
 	protected:

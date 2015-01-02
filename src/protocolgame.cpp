@@ -343,7 +343,7 @@ void ProtocolGame::removeSpectator(ProtocolGame* client)
 	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
 
 	auto it = std::find(m_spectators.begin(), m_spectators.end(), client);
-	if(it != m_spectators.end()){
+	if (it != m_spectators.end()) {
 		m_spectators.erase(it);
 		client->unRef();
 	}
@@ -402,8 +402,9 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	if (accountName.empty()) {
-		if(!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING))
+		if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING)) {
 			dispatchDisconnectClient("You must enter your account name.");
+		}
 		return;
 	}
 
@@ -502,8 +503,7 @@ void ProtocolGame::writeToOutputBuffer(const NetworkMessage& msg, bool broadcast
 			if(auto connection = getConnection())
 				connection->send(out);
 		}
-	}
-	else {
+	} else {
 		out = getOutputBuffer(msg.getMessageLength());
 
 		if (out) {
