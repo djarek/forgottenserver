@@ -118,8 +118,6 @@ void ProtocolCast::onRecvFirstMessage(NetworkMessage& msg)
 		return;
 	}
 
-#define dispatchDisconnectClient(err) 
-
 	if (version < CLIENT_VERSION_MIN || version > CLIENT_VERSION_MAX) {
 		g_dispatcher.addTask(createTask(
 				std::bind(&ProtocolCast::disconnectSpectator, this, "Only clients with protocol " CLIENT_VERSION_STR " allowed!")));
@@ -127,9 +125,6 @@ void ProtocolCast::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	g_dispatcher.addTask(createTask(std::bind(&ProtocolCast::login, this, characterName, password)));
-	
-#undef dispatchDisconnectClient
-
 }
 
 void ProtocolCast::syncKnownCreatureSets()
@@ -252,7 +247,6 @@ void ProtocolCast::parsePacket(NetworkMessage& msg)
 void ProtocolCast::parseSpectatorSay(NetworkMessage& msg)
 {
 	SpeakClasses type = (SpeakClasses)msg.GetByte();
-
 	uint16_t channelId = 0;
 
 	if (type != TALKTYPE_CHANNEL_Y) {
