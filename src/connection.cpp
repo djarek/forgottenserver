@@ -407,9 +407,10 @@ void Connection::onWriteOperation(OutputMessage_ptr msg, const boost::system::er
 
 			if (unencryptedMsg) {
 				for (const auto spectator : spectators) {
-					auto newMsg = OutputMessagePool::getInstance()->getOutputMessage(spectator, false);
-					newMsg->append(unencryptedMsg);
-					spectator->getConnection()->send(newMsg);
+					if (auto newMsg = OutputMessagePool::getInstance()->getOutputMessage(spectator, false)) {
+						newMsg->append(unencryptedMsg);
+						spectator->getConnection()->send(newMsg);
+					}
 				}
 			}
 		}
