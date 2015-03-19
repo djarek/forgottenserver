@@ -160,8 +160,8 @@ void ProtocolSpectator::syncKnownCreatureSets()
 			msg.AddByte(0x6A);
 			msg.AddPosition(playerPos);
 			msg.AddByte(1); //stackpos
-			checkCreatureAsKnown(player->getID(), known, removedKnown);
-			AddCreature(msg, player, known, removedKnown);
+			checkCreatureAsKnown(creature->getID(), known, removedKnown);
+			AddCreature(msg, creature, known, removedKnown);
 			RemoveTileThing(msg, playerPos, 1);
 		}
 	}
