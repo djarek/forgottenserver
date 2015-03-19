@@ -393,9 +393,9 @@ void Connection::onWriteOperation(OutputMessage_ptr msg, const boost::system::er
 
 			if (unencryptedMsg) {
 				for (const auto spectator : spectators) {
-					if (auto newMsg = OutputMessagePool::getInstance()->getOutputMessage(spectator, false)) {
+					auto newMsg = OutputMessagePool::getInstance()->getOutputMessage(spectator, true);
+					if (newMsg) {
 						newMsg->append(unencryptedMsg);
-						spectator->getConnection()->send(newMsg);
 					}
 				}
 			}
