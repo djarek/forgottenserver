@@ -6122,12 +6122,13 @@ int32_t LuaScriptInterface::luaNetworkMessageSkipBytes(lua_State* L)
 
 int32_t LuaScriptInterface::luaNetworkMessageSendToPlayer(lua_State* L)
 {
-	// networkMessage:sendToPlayer(player)
+	// networkMessage:sendToPlayer(player[, broadcast])
 	Player* player = getPlayer(L, 2);
 	NetworkMessage* message = getUserdata<NetworkMessage>(L, 1);
 	if (player) {
 		if (message) {
-			player->sendNetworkMessage(*message);
+			bool broadcast = getBoolean(L, 3, true);
+			player->sendNetworkMessage(*message, broadcast);
 		}
 		pushBoolean(L, true);
 	} else {
