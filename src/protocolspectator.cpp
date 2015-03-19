@@ -74,7 +74,7 @@ void ProtocolSpectator::onRecvFirstMessage(NetworkMessage& msg)
 		return;
 	}
 
-	OperatingSystem_t operatingSystem = (OperatingSystem_t)msg.get<uint16_t>();
+	operatingSystem = (OperatingSystem_t)msg.get<uint16_t>();
 	version = msg.get<uint16_t>();
 
 	msg.SkipBytes(5); // U32 clientVersion, U8 clientType
@@ -147,15 +147,18 @@ void ProtocolSpectator::syncKnownCreatureSets()
 	}
 	sendEmptyTileOnPlayerPos(tile, playerPos);
 
-	NetworkMessage msg;
+	
 	bool known;
 	uint32_t removedKnown;
 	for (const auto creatureID : casterKnownCreatures) {
+		if (knownCreatureSet.find(creatureID) != knownCreatureSet.end()) {
+			continue;
+		}
+
+		NetworkMessage msg;
 		const auto creature = g_game.getCreatureByID(creatureID);
 		if (creature && !creature->isRemoved()) {
-			if (knownCreatureSet.find(creatureID) != knownCreatureSet.end()) {
-				continue;
-			}
+			
 
 			msg.AddByte(0x6A);
 			msg.AddPosition(playerPos);
@@ -163,9 +166,41 @@ void ProtocolSpectator::syncKnownCreatureSets()
 			checkCreatureAsKnown(creature->getID(), known, removedKnown);
 			AddCreature(msg, creature, known, removedKnown);
 			RemoveTileThing(msg, playerPos, 1);
-		}
+		} else if (operatingSystem <= CLIENTOS_FLASH) { // otclient freeze with huge amount of creature add, but do not debug if there are unknown creatures, best solution for now :(
+			CreatureType_t creatureType = CREATURETYPE_NPC;
+			if(creatureID <= 0x10000000)
+					creatureType = CREATURETYPE_PLAYER;
+			else if(creatureID <= 0x40000000)
+					creatureType = CREATURETYPE_MONSTER;
+
+			// add dummy creature
+			msg.AddByte(0x6A);
+			msg.AddPosition(playerPos);
+			msg.AddByte(1); //stackpos
+			msg.add<uint16_t>(0x61); // is not known
+			msg.add<uint32_t>(0); // remove no creature
+			msg.add<uint32_t>(creatureID); // creature id
+			msg.AddByte(creatureType); // creature type
+			msg.AddString("Dummy");
+			msg.AddByte(0x00); // health percent
+			msg.AddByte(NORTH); // direction
+			AddOutfit(msg, player->getCurrentOutfit()); // outfit
+			msg.AddByte(0); // light level
+			msg.AddByte(0); // light color
+			msg.add<uint16_t>(200); // speed
+			msg.AddByte(SKULL_NONE); // skull type
+			msg.AddByte(SHIELD_NONE); // party shield
+			msg.AddByte(GUILDEMBLEM_NONE); // guild emblem
+			msg.AddByte(creatureType); // creature type
+			msg.AddByte(SPEECHBUBBLE_NONE); // speechbubble
+			msg.AddByte(0xFF); // MARK_UNMARKED
+			msg.add<uint16_t>(0x00); // helpers
+			msg.AddByte(0); // walkThrough
+			RemoveTileThing(msg, playerPos, 1);
+		
+		writeToOutputBuffer(msg);
 	}
-	writeToOutputBuffer(msg);
+	
 
 	sendUpdateTile(tile, playerPos);
 }

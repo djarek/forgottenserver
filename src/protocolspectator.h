@@ -35,6 +35,7 @@ class ProtocolSpectator : public ProtocolGame
 	private:
 
 		ProtocolGame* client;
+		OperatingSystem_t operatingSystem;
 
 		void login(const std::string& liveCastName, const std::string& liveCastPassword);
 		void logout();
