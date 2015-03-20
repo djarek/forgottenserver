@@ -295,38 +295,44 @@ void ProtocolGame::logout(bool displayEffect, bool forced)
 
 bool ProtocolGame::startLiveCast(const std::string& password /*= ""*/)
 {
-	if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !getConnection()) {
+	auto connection = getConnection();
+	if (!g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING) || m_isLiveCaster || !player || player->isRemoved() || !connection) {
 		return false;
 	}
 
-	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
+	{
+		std::lock_guard<decltype(liveCastLock)> lock {liveCastLock};
+		//DO NOT do any send operations here
+		m_liveCastName = player->getName();
+		m_liveCastPassword = password;
+		m_isLiveCaster = true;
+	}
 
+	registerLiveCast();
 	//Send a "dummy" channel
 	sendChannel(CHANNEL_CAST, LIVE_CAST_CHAT_NAME, nullptr, nullptr);
-	m_liveCastName = player->getName();
-	m_liveCastPassword = password;
-	m_spectators.clear();
-	m_isLiveCaster = true;
-	registerLiveCast();
-
 	return true;
 }
 
 bool ProtocolGame::stopLiveCast()
 {
-	if (!m_isLiveCaster || !player) {
+	auto connection = getConnection();
+	if (!m_isLiveCaster || !player || !connection) {
 		return false;
 	}
+	CastSpectatorVec spectators;
 
-	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
+	{
+		std::lock_guard<decltype(liveCastLock)> lock {liveCastLock};
+		//DO NOT do any send operations here
+		std::swap(spectators, m_spectators);
+		m_isLiveCaster = false;
+	}
 
-	for (auto& spectator : m_spectators) {
+	for (auto& spectator : spectators) {
 		spectator->disconnectClient("Live cast has been stopped. Relogin to refresh the cast list.");
 		spectator->unRef();
 	}
-
-	m_spectators.clear();
-	m_isLiveCaster = false;
 	unregisterLiveCast();
 
 	return true;
@@ -372,7 +378,7 @@ void ProtocolGame::updateLiveCastInfo()
 void ProtocolGame::addSpectator(ProtocolGame* spectatorClient)
 {
 	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
-
+	//DO NOT do any send operations here
 	m_spectators.push_back(spectatorClient);
 	spectatorClient->addRef();
 	updateLiveCastInfo();
@@ -381,7 +387,7 @@ void ProtocolGame::addSpectator(ProtocolGame* spectatorClient)
 void ProtocolGame::removeSpectator(ProtocolGame* spectatorClient)
 {
 	std::lock_guard<decltype(liveCastLock)> lock(liveCastLock);
-
+	//DO NOT do any send operations here
 	auto it = std::find(m_spectators.begin(), m_spectators.end(), spectatorClient);
 	if (it != m_spectators.end()) {
 		m_spectators.erase(it);

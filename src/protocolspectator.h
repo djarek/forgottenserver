@@ -55,6 +55,7 @@ class ProtocolSpectator : public ProtocolGame
 		void onRecvFirstMessage(NetworkMessage& msg) override;
 
 		void parseSpectatorSay(NetworkMessage& msg);
+		void addDummyCreature(NetworkMessage& msg, const uint32_t& creatureID, const Position& playerPos);
 
 };
 

@@ -135,6 +135,40 @@ void ProtocolSpectator::sendEmptyTileOnPlayerPos(const Tile* tile, const Positio
 	msg.AddByte(0xFF);
 	writeToOutputBuffer(msg);
 }
+
+void ProtocolSpectator::addDummyCreature(NetworkMessage& msg, const uint32_t& creatureID, const Position& playerPos)
+{
+	// add dummy creature
+	CreatureType_t creatureType = CREATURETYPE_NPC;
+	if(creatureID <= 0x10000000) {
+		creatureType = CREATURETYPE_PLAYER;
+	} else if(creatureID <= 0x40000000) {
+		creatureType = CREATURETYPE_MONSTER;
+	}
+	msg.AddByte(0x6A);
+	msg.AddPosition(playerPos);
+	msg.AddByte(1); //stackpos
+	msg.Add<uint16_t>(0x61); // is not known
+	msg.Add<uint32_t>(0); // remove no creature
+	msg.Add<uint32_t>(creatureID); // creature id
+	msg.AddByte(creatureType); // creature type
+	msg.AddString("Dummy");
+	msg.AddByte(0x00); // health percent
+	msg.AddByte(DIRECTION_NORTH); // direction
+	AddOutfit(msg, player->getCurrentOutfit()); // outfit
+	msg.AddByte(0); // light level
+	msg.AddByte(0); // light color
+	msg.Add<uint16_t>(200); // speed
+	msg.AddByte(SKULL_NONE); // skull type
+	msg.AddByte(SHIELD_NONE); // party shield
+	msg.AddByte(GUILDEMBLEM_NONE); // guild emblem
+	msg.AddByte(creatureType); // creature type
+	msg.AddByte(SPEECHBUBBLE_NONE); // speechbubble
+	msg.AddByte(0xFF); // MARK_UNMARKED
+	msg.Add<uint16_t>(0x00); // helpers
+	msg.AddByte(0); // walkThrough
+}
+
 void ProtocolSpectator::syncKnownCreatureSets()
 {
 	const auto& casterKnownCreatures = client->getKnownCreatures();
@@ -147,7 +181,6 @@ void ProtocolSpectator::syncKnownCreatureSets()
 	}
 	sendEmptyTileOnPlayerPos(tile, playerPos);
 
-	
 	bool known;
 	uint32_t removedKnown;
 	for (const auto creatureID : casterKnownCreatures) {
@@ -161,36 +194,7 @@ void ProtocolSpectator::syncKnownCreatureSets()
 			AddCreature(msg, creature, known, removedKnown);
 			RemoveTileThing(msg, playerPos, 1);
 		} else if (operatingSystem <= CLIENTOS_FLASH) { // otclient freeze with huge amount of creature add, but do not debug if there are unknown creatures, best solution for now :(
-			CreatureType_t creatureType = CREATURETYPE_NPC;
-			if(creatureID <= 0x10000000) {
-					creatureType = CREATURETYPE_PLAYER;
-			} else if(creatureID <= 0x40000000) {
-					creatureType = CREATURETYPE_MONSTER;
-			}
-
-			// add dummy creature
-			msg.AddByte(0x6A);
-			msg.AddPosition(playerPos);
-			msg.AddByte(1); //stackpos
-			msg.Add<uint16_t>(0x61); // is not known
-			msg.Add<uint32_t>(0); // remove no creature
-			msg.Add<uint32_t>(creatureID); // creature id
-			msg.AddByte(creatureType); // creature type
-			msg.AddString("Dummy");
-			msg.AddByte(0x00); // health percent
-			msg.AddByte(DIRECTION_NORTH); // direction
-			AddOutfit(msg, player->getCurrentOutfit()); // outfit
-			msg.AddByte(0); // light level
-			msg.AddByte(0); // light color
-			msg.Add<uint16_t>(200); // speed
-			msg.AddByte(SKULL_NONE); // skull type
-			msg.AddByte(SHIELD_NONE); // party shield
-			msg.AddByte(GUILDEMBLEM_NONE); // guild emblem
-			msg.AddByte(creatureType); // creature type
-			msg.AddByte(SPEECHBUBBLE_NONE); // speechbubble
-			msg.AddByte(0xFF); // MARK_UNMARKED
-			msg.Add<uint16_t>(0x00); // helpers
-			msg.AddByte(0); // walkThrough
+			addDummyCreature(msg, creatureID, playerPos);
 			RemoveTileThing(msg, playerPos, 1);
 		}
 		writeToOutputBuffer(msg);
