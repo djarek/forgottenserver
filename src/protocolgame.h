@@ -186,7 +186,9 @@ class ProtocolGame : public Protocol
 		 *  \param text string containing the text message
 		 */
 		void broadcastSpectatorMessage(const std::string& text) {
-			sendChannelMessage("Spectator", text, TALKTYPE_CHANNEL_Y, CHANNEL_CAST);
+			if (getConnection() && player) {
+				sendChannelMessage("Spectator", text, TALKTYPE_CHANNEL_Y, CHANNEL_CAST);
+			}
 		}
 
 	protected:
