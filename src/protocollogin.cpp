@@ -82,11 +82,10 @@ void ProtocolLogin::getCastingStreamsList()
 		addWorldInfo(output, true);
 
 		const auto& casts = ProtocolGame::getLiveCasts();
-		uint8_t size = std::min<size_t>(std::numeric_limits<uint8_t>::max(), casts.size());
-		output->addByte(size);
-		for (uint8_t i = 0; i < size; i++) {
+		output->addByte(casts.size());
+		for (const auto& cast : casts) {
 			output->addByte(0);
-			output->addString(casts[i].first->getName());
+			output->addString(cast.first->getName());
 		}
 		output->add<uint16_t>(0x0); //The client expects the number of premium days left.
 		OutputMessagePool::getInstance()->send(output);

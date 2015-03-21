@@ -303,9 +303,13 @@ bool ProtocolGame::startLiveCast(const std::string& password /*= ""*/)
 	{
 		std::lock_guard<decltype(liveCastLock)> lock {liveCastLock};
 		//DO NOT do any send operations here
+		if (m_liveCasts.size() >= getMaxLiveCastCount()) {
+			return false;
+		}
 		m_liveCastName = player->getName();
 		m_liveCastPassword = password;
 		m_isLiveCaster = true;
+		m_liveCasts.insert(std::make_pair(player, this));
 	}
 
 	registerLiveCast();
@@ -327,6 +331,7 @@ bool ProtocolGame::stopLiveCast()
 		//DO NOT do any send operations here
 		std::swap(spectators, m_spectators);
 		m_isLiveCaster = false;
+		m_liveCasts.erase(player);
 	}
 
 	for (auto& spectator : spectators) {
@@ -355,7 +360,6 @@ void ProtocolGame::registerLiveCast()
 	query << "INSERT into `live_casts` (`player_id`, `cast_name`, `password`) VALUES (" << player->getGUID() << ", '"
 		<< getLiveCastName() << "', " << isPasswordProtected() << ");";
 	g_databaseTasks.addTask(query.str());
-	m_liveCasts.insert(std::make_pair(player, this));
 }
 
 void ProtocolGame::unregisterLiveCast()
@@ -363,7 +367,6 @@ void ProtocolGame::unregisterLiveCast()
 	std::ostringstream query;
 	query << "DELETE FROM `live_casts` WHERE `player_id`=" << player->getGUID() << ";";
 	g_databaseTasks.addTask(query.str());
-	m_liveCasts.erase(player);
 }
 
 void ProtocolGame::updateLiveCastInfo()

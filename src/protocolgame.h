@@ -190,6 +190,9 @@ class ProtocolGame : public Protocol
 				sendChannelMessage("Spectator", text, TALKTYPE_CHANNEL_Y, CHANNEL_CAST);
 			}
 		}
+		static uint8_t getMaxLiveCastCount() {
+			return std::numeric_limits<int8_t>::max();
+		}
 
 	protected:
 		std::unordered_set<uint32_t> knownCreatureSet;
