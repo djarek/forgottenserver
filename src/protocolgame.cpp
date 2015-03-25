@@ -335,6 +335,7 @@ bool ProtocolGame::stopLiveCast()
 	}
 
 	for (auto& spectator : spectators) {
+		spectator->setPlayer(nullptr);
 		spectator->disconnectClient("Live cast has been stopped. Relogin to refresh the cast list.");
 		spectator->unRef();
 	}
