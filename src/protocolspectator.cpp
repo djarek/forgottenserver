@@ -184,6 +184,10 @@ void ProtocolSpectator::syncKnownCreatureSets()
 	bool known;
 	uint32_t removedKnown;
 	for (const auto creatureID : casterKnownCreatures) {
+		if (knownCreatureSet.find(creatureID) != knownCreatureSet.end()) {
+			continue;
+		}
+
 		NetworkMessage msg;
 		const auto creature = g_game.getCreatureByID(creatureID);
 		if (creature && !creature->isRemoved()) {
