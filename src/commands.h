@@ -31,7 +31,6 @@ class Commands
 {
 	public:
 		Commands();
-		~Commands();
 
 		// non-copyable
 		Commands(const Commands&) = delete;
@@ -51,7 +50,7 @@ class Commands
 		//table of commands
 		static s_defcommands defined_commands[];
 
-		std::map<std::string, Command*> commandMap;
+		std::map<std::string, std::unique_ptr<Command>> commandMap;
 		bool loaded;
 };
 

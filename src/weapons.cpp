@@ -52,14 +52,11 @@ const Weapon* Weapons::getWeapon(const Item* item) const
 	if (it == weapons.end()) {
 		return nullptr;
 	}
-	return it->second;
+	return it->second.get();
 }
 
 void Weapons::clear()
 {
-	for (const auto& it : weapons) {
-		delete it.second;
-	}
 	weapons.clear();
 
 	m_scriptInterface.reInitState();
@@ -87,9 +84,8 @@ void Weapons::loadDefaults()
 			case WEAPON_AXE:
 			case WEAPON_SWORD:
 			case WEAPON_CLUB: {
-				WeaponMelee* weapon = new WeaponMelee(&m_scriptInterface);
+				auto& weapon (weapons[i] = std::make_unique<WeaponMelee>(&m_scriptInterface));
 				weapon->configureWeapon(it);
-				weapons[i] = weapon;
 				break;
 			}
 
@@ -99,9 +95,8 @@ void Weapons::loadDefaults()
 					continue;
 				}
 
-				WeaponDistance* weapon = new WeaponDistance(&m_scriptInterface);
+				auto& weapon = (weapons[i] = std::make_unique<WeaponDistance>(&m_scriptInterface));
 				weapon->configureWeapon(it);
-				weapons[i] = weapon;
 				break;
 			}
 
@@ -125,9 +120,9 @@ Event* Weapons::getEvent(const std::string& nodeName)
 
 bool Weapons::registerEvent(Event* event, const pugi::xml_node&)
 {
-	Weapon* weapon = reinterpret_cast<Weapon*>(event);
+	Weapon* weapon = static_cast<Weapon*>(event);
 
-	auto result = weapons.emplace(weapon->getID(), weapon);
+	auto result = weapons.emplace(weapon->getID(), std::unique_ptr<Weapon>(weapon));
 	if (!result.second) {
 		std::cout << "[Warning - Weapons::registerEvent] Duplicate registered item with id: " << weapon->getID() << std::endl;
 	}

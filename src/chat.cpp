@@ -279,24 +279,7 @@ Chat::Chat()
 	: m_scriptInterface("Chat Interface")
 {
 	m_scriptInterface.initState();
-	dummyPrivate = new PrivateChatChannel(CHANNEL_PRIVATE, "Private Chat Channel");
-}
-
-Chat::~Chat()
-{
-	for (const auto& it : guildChannels) {
-		delete it.second;
-	}
-
-	for (const auto& it : partyChannels) {
-		delete it.second;
-	}
-
-	for (const auto& it : privateChannels) {
-		delete it.second;
-	}
-
-	delete dummyPrivate;
+	dummyPrivate = std::make_unique<PrivateChatChannel>(CHANNEL_PRIVATE, "Private Chat Channel");
 }
 
 bool Chat::load()
@@ -354,8 +337,7 @@ ChatChannel* Chat::createChannel(const Player& player, uint16_t channelId)
 		case CHANNEL_GUILD: {
 			Guild* guild = player.getGuild();
 			if (guild) {
-				ChatChannel* newChannel = new ChatChannel(channelId, guild->getName());
-				guildChannels[guild->getId()] = newChannel;
+				auto newChannel = (guildChannels[guild->getId()] = std::make_unique<ChatChannel>(channelId, guild->getName())).get();
 				return newChannel;
 			}
 			break;
@@ -364,8 +346,7 @@ ChatChannel* Chat::createChannel(const Player& player, uint16_t channelId)
 		case CHANNEL_PARTY: {
 			Party* party = player.getParty();
 			if (party) {
-				ChatChannel* newChannel = new ChatChannel(channelId, "Party");
-				partyChannels[party] = newChannel;
+				auto newChannel = (partyChannels[party] = std::make_unique<ChatChannel>(channelId, "Party")).get();
 				return newChannel;
 			}
 			break;
@@ -380,9 +361,8 @@ ChatChannel* Chat::createChannel(const Player& player, uint16_t channelId)
 			//find a free private channel slot
 			for (uint16_t i = 100; i < 10000; ++i) {
 				if (privateChannels.find(i) == privateChannels.end()) {
-					PrivateChatChannel* newChannel = new PrivateChatChannel(i, player.getName() + "'s Channel");
+					auto newChannel = (privateChannels[i] = std::make_unique<PrivateChatChannel>(i, player.getName() + "'s Channel")).get();
 					newChannel->setOwner(player.getGUID());
-					privateChannels[i] = newChannel;
 					return newChannel;
 				}
 			}
@@ -409,7 +389,6 @@ bool Chat::deleteChannel(const Player& player, uint16_t channelId)
 				return false;
 			}
 
-			delete it->second;
 			guildChannels.erase(it);
 			break;
 		}
@@ -425,7 +404,6 @@ bool Chat::deleteChannel(const Player& player, uint16_t channelId)
 				return false;
 			}
 
-			delete it->second;
 			partyChannels.erase(it);
 			break;
 		}
@@ -438,7 +416,6 @@ bool Chat::deleteChannel(const Player& player, uint16_t channelId)
 
 			it->second->closeChannel();
 
-			delete it->second;
 			privateChannels.erase(it);
 			break;
 		}
@@ -483,7 +460,7 @@ void Chat::removeUserFromAllChannels(const Player& player)
 	}
 
 	for (const auto& it : privateChannels) {
-		PrivateChatChannel* channel = it.second;
+		PrivateChatChannel* channel = it.second.get();
 		channel->removeInvite(player.getGUID());
 		channel->removeUser(player);
 		if (channel->getOwner() == player.getGUID()) {
@@ -552,7 +529,7 @@ ChannelList Chat::getChannelList(const Player& player)
 
 	bool hasPrivate = false;
 	for (const auto& it : privateChannels) {
-		if (PrivateChatChannel* channel = it.second) {
+		if (auto channel = it.second.get()) {
 			uint32_t guid = player.getGUID();
 			if (channel->isInvited(guid)) {
 				list.push_back(channel);
@@ -565,7 +542,7 @@ ChannelList Chat::getChannelList(const Player& player)
 	}
 
 	if (!hasPrivate && player.isPremium()) {
-		list.push_front(dummyPrivate);
+		list.push_front(dummyPrivate.get());
 	}
 	return list;
 }
@@ -578,7 +555,7 @@ ChatChannel* Chat::getChannel(const Player& player, uint16_t channelId)
 			if (guild) {
 				auto it = guildChannels.find(guild->getId());
 				if (it != guildChannels.end()) {
-					return it->second;
+					return it->second.get();
 				}
 			}
 			break;
@@ -589,7 +566,7 @@ ChatChannel* Chat::getChannel(const Player& player, uint16_t channelId)
 			if (party) {
 				auto it = partyChannels.find(party);
 				if (it != partyChannels.end()) {
-					return it->second;
+					return it->second.get();
 				}
 			}
 			break;
@@ -606,7 +583,7 @@ ChatChannel* Chat::getChannel(const Player& player, uint16_t channelId)
 			} else {
 				auto it2 = privateChannels.find(channelId);
 				if (it2 != privateChannels.end() && it2->second->isInvited(player.getGUID())) {
-					return it2->second;
+					return it2->second.get();
 				}
 			}
 			break;
@@ -621,7 +598,7 @@ ChatChannel* Chat::getGuildChannelById(uint32_t guildId)
 	if (it == guildChannels.end()) {
 		return nullptr;
 	}
-	return it->second;
+	return it->second.get();
 }
 
 ChatChannel* Chat::getChannelById(uint16_t channelId)
@@ -637,7 +614,7 @@ PrivateChatChannel* Chat::getPrivateChannel(const Player& player)
 {
 	for (const auto& it : privateChannels) {
 		if (it.second->getOwner() == player.getGUID()) {
-			return it.second;
+			return it.second.get();
 		}
 	}
 	return nullptr;

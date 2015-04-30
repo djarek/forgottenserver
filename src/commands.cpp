@@ -78,22 +78,15 @@ Commands::Commands()
 
 	//setup command map
 	for (uint32_t i = 0; i < sizeof(defined_commands) / sizeof(defined_commands[0]); i++) {
-		Command* cmd = new Command;
+		std::string key = defined_commands[i].name;
+		commandMap[key] = std::make_unique<Command>();
+		auto& cmd = commandMap[key];
 		cmd->loadedGroupId = false;
 		cmd->loadedAccountType = false;
 		cmd->loadedLogging = false;
 		cmd->logged = true;
 		cmd->groupId = 1;
 		cmd->f = defined_commands[i].f;
-		std::string key = defined_commands[i].name;
-		commandMap[key] = cmd;
-	}
-}
-
-Commands::~Commands()
-{
-	for (const auto& it : commandMap) {
-		delete it.second;
 	}
 }
 
@@ -121,7 +114,7 @@ bool Commands::loadFromXml()
 			continue;
 		}
 
-		Command* command = it->second;
+		auto& command = it->second;
 
 		pugi::xml_attribute groupAttribute = commandNode.attribute("group");
 		if (groupAttribute) {
@@ -155,7 +148,7 @@ bool Commands::loadFromXml()
 	}
 
 	for (const auto& it : commandMap) {
-		Command* command = it.second;
+		auto& command = it.second;
 		if (!command->loadedGroupId) {
 			std::cout << "[Warning - Commands::loadFromXml] Missing group id for command " << it.first << std::endl;
 		}
@@ -178,7 +171,7 @@ bool Commands::reload()
 	loaded = false;
 
 	for (const auto& it : commandMap) {
-		Command* command = it.second;
+		auto& command = it.second;
 		command->groupId = 1;
 		command->accountType = ACCOUNT_TYPE_GOD;
 		command->loadedGroupId = false;
@@ -210,7 +203,7 @@ bool Commands::exeCommand(Player& player, const std::string& cmd)
 		return false;
 	}
 
-	Command* command = it->second;
+	auto& command = it->second;
 	if (command->groupId > player.getGroup()->id || command->accountType > player.getAccountType()) {
 		if (player.getGroup()->access) {
 			player.sendTextMessage(MESSAGE_STATUS_SMALL, "You can not execute this command.");

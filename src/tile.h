@@ -181,7 +181,7 @@ class Tile : public Cylinder
 	public:
 		static Tile& nullptr_tile;
 		Tile(uint16_t x, uint16_t y, uint16_t z);
-		virtual ~Tile();
+		virtual ~Tile() = default;
 
 		// non-copyable
 		Tile(const Tile&) = delete;
@@ -355,7 +355,7 @@ class Tile : public Cylinder
 
 	public:
 		QTreeLeafNode* qt_node;
-		Item* ground;
+		std::unique_ptr<Item> ground;
 
 	protected:
 		Position tilePos;
@@ -447,11 +447,6 @@ inline Tile::Tile(uint16_t x, uint16_t y, uint16_t z) :
 	tilePos(x, y, z),
 	m_flags(0)
 {
-}
-
-inline Tile::~Tile()
-{
-	delete ground;
 }
 
 inline CreatureVector* Tile::getCreatures()

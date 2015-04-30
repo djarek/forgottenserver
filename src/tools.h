@@ -94,4 +94,12 @@ inline int64_t OTSYS_TIME()
 	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
+static_assert(__cplusplus == 201103L, "C++14 detected. Remove the definition below");
+namespace std {
+	template <typename T, typename... Args>
+	inline std::unique_ptr<T> make_unique(Args&&... args) {
+		return std::unique_ptr<T> (new T(std::forward<Args>(args)...));
+	}
+}
+
 #endif

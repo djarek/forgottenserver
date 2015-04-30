@@ -54,7 +54,7 @@ class Weapons final : public BaseEvents
 		Event* getEvent(const std::string& nodeName) final;
 		bool registerEvent(Event* event, const pugi::xml_node& node) final;
 
-		std::map<uint32_t, Weapon*> weapons;
+		std::map<uint32_t, std::unique_ptr<Weapon>> weapons;
 
 		LuaScriptInterface m_scriptInterface;
 };

@@ -146,8 +146,7 @@ void Map::setTile(uint16_t x, uint16_t y, uint8_t z, Tile* newTile)
 		}
 
 		if (newTile->ground) {
-			tile->addThing(newTile->ground);
-			newTile->ground = nullptr;
+			tile->addThing(newTile->ground.release());
 		}
 		delete newTile;
 	} else {

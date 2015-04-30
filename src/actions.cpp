@@ -51,15 +51,11 @@ Actions::~Actions()
 inline void Actions::clearMap(ActionUseMap& map)
 {
 	// Filter out duplicates to avoid double-free
-	std::unordered_set<Action*> set;
+	std::unordered_set<std::unique_ptr<Action>> set;
 	for (const auto& it : map) {
-		set.insert(it.second);
+		set.emplace(it.second);
 	}
 	map.clear();
-
-	for (Action* action : set) {
-		delete action;
-	}
 }
 
 void Actions::clear()

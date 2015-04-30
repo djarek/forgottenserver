@@ -122,7 +122,6 @@ class Chat
 {
 	public:
 		Chat();
-		~Chat();
 
 		// non-copyable
 		Chat(const Chat&) = delete;
@@ -152,13 +151,13 @@ class Chat
 
 	private:
 		std::map<uint16_t, ChatChannel> normalChannels;
-		std::map<uint16_t, PrivateChatChannel*> privateChannels;
-		std::map<Party*, ChatChannel*> partyChannels;
-		std::map<uint32_t, ChatChannel*> guildChannels;
+		std::map<uint16_t, std::unique_ptr<PrivateChatChannel>> privateChannels;
+		std::map<Party*, std::unique_ptr<ChatChannel>> partyChannels;
+		std::map<uint32_t, std::unique_ptr<ChatChannel>> guildChannels;
 
 		LuaScriptInterface m_scriptInterface;
 
-		ChatChannel* dummyPrivate;
+		std::unique_ptr<ChatChannel> dummyPrivate;
 };
 
 #endif

@@ -3595,7 +3595,7 @@ int LuaScriptInterface::luaDoAreaCombatCondition(lua_State* L)
 	if (area || areaId == 0) {
 		CombatParams params;
 		params.impactEffect = getNumber<uint8_t>(L, 5);
-		params.conditionList.push_front(condition);
+		params.conditionList.emplace_front(condition);
 		Combat::doCombatCondition(creature, getPosition(L, 2), area, params);
 		pushBoolean(L, true);
 	} else {
@@ -3632,7 +3632,7 @@ int LuaScriptInterface::luaDoTargetCombatCondition(lua_State* L)
 
 	CombatParams params;
 	params.impactEffect = getNumber<uint8_t>(L, 4);
-	params.conditionList.push_front(condition);
+	params.conditionList.emplace_front(condition);
 	Combat::doCombatCondition(creature, target, params);
 	pushBoolean(L, true);
 	return 1;
@@ -5080,8 +5080,8 @@ int LuaScriptInterface::luaTileGetGround(lua_State* L)
 	// tile:getGround()
 	Tile* tile = getUserdata<Tile>(L, 1);
 	if (tile && tile->ground) {
-		pushUserdata<Item>(L, tile->ground);
-		setItemMetatable(L, -1, tile->ground);
+		pushUserdata<Item>(L, tile->ground.get());
+		setItemMetatable(L, -1, tile->ground.get());
 	} else {
 		lua_pushnil(L);
 	}
@@ -5285,7 +5285,7 @@ int LuaScriptInterface::luaTileGetItemByType(lua_State* L)
 		return 1;
 	}
 
-	if (Item* item = tile->ground) {
+	if (Item* item = tile->ground.get()) {
 		const ItemType& it = Item::items[item->getID()];
 		if (it.type == itemType) {
 			pushUserdata<Item>(L, item);

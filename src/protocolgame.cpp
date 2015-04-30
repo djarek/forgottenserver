@@ -566,7 +566,7 @@ void ProtocolGame::GetTileDescription(const Tile* tile, NetworkMessage& msg)
 
 	int32_t count;
 	if (tile->ground) {
-		msg.addItem(tile->ground);
+		msg.addItem(tile->ground.get());
 		count = 1;
 	} else {
 		count = 0;
