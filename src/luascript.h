@@ -260,8 +260,7 @@ class LuaScriptInterface
 		template<class T>
 		static void pushUserdata(lua_State* L, T* value)
 		{
-			T** userdata = static_cast<T**>(lua_newuserdata(L, sizeof(T*)));
-			*userdata = value;
+			::new (lua_newuserdata(L, sizeof(UserdataPtr<T>))) UserdataPtr<T>{value};
 		}
 
 		// Metatables
@@ -293,6 +292,49 @@ class LuaScriptInterface
 			}
 			return getNumber<T>(L, arg);
 		}
+
+		struct UserdataBase
+		{
+			struct empty {};
+			template <class T>
+			explicit UserdataBase(T*)
+				: tag{getTag<typename std::remove_const<T>::type>()}
+			{
+			}
+
+			template <class T>
+			static void const* getTag()
+			{
+				static constexpr empty e{};
+				return &e;
+			}
+
+			template <class T>
+			T** as()
+			{
+				if (tag != getTag<typename std::remove_const<T>::type>()) {
+					return nullptr;
+				}
+
+				return &static_cast<userdata_ptr<T>*>(this)->p;
+			}
+		private:
+			void const* tag;
+		};
+
+		template <class T>
+		struct UserdataPtr : UserdataBase
+		{
+			explicit UserdataPtr(T* p)
+				: UserdataBase(p)
+				, p{p}
+			{
+			}
+
+		private:
+			T* p;
+		};
+
 		template<class T>
 		static T* getUserdata(lua_State* L, int32_t arg)
 		{
@@ -305,7 +347,7 @@ class LuaScriptInterface
 		template<class T>
 		static T** getRawUserdata(lua_State* L, int32_t arg)
 		{
-			return static_cast<T**>(lua_touserdata(L, arg));
+			return static_cast<UserdataBase*>(lua_touserdata(L, arg))->as<T>();
 		}
 
 		static bool getBoolean(lua_State* L, int32_t arg)
@@ -735,7 +777,7 @@ class LuaScriptInterface
 		static int luaContainerAddItem(lua_State* L);
 		static int luaContainerAddItemEx(lua_State* L);
 		static int luaContainerGetCorpseOwner(lua_State* L);
-		
+
 		// Teleport
 		static int luaTeleportCreate(lua_State* L);
 
